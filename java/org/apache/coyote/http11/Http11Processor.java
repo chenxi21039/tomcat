@@ -1265,13 +1265,6 @@ public class Http11Processor extends AbstractProcessor {
             }
         }
 
-        MessageBytes methodMB = request.method();
-        if (methodMB.equals(Constants.GET)) {
-            methodMB.setString(Constants.GET);
-        } else if (methodMB.equals(Constants.POST)) {
-            methodMB.setString(Constants.POST);
-        }
-
         MimeHeaders headers = request.getMimeHeaders();
 
         // Check connection header
@@ -1286,17 +1279,16 @@ public class Http11Processor extends AbstractProcessor {
             }
         }
 
-        MessageBytes expectMB = null;
         if (http11) {
-            expectMB = headers.getValue("expect");
-        }
-        if (expectMB != null) {
-            if (expectMB.indexOfIgnoreCase("100-continue", 0) != -1) {
-                inputBuffer.setSwallowInput(false);
-                request.setExpectation(true);
-            } else {
-                response.setStatus(HttpServletResponse.SC_EXPECTATION_FAILED);
-                setErrorState(ErrorState.CLOSE_CLEAN, null);
+            MessageBytes expectMB = headers.getValue("expect");
+            if (expectMB != null) {
+                if (expectMB.indexOfIgnoreCase("100-continue", 0) != -1) {
+                    inputBuffer.setSwallowInput(false);
+                    request.setExpectation(true);
+                } else {
+                    response.setStatus(HttpServletResponse.SC_EXPECTATION_FAILED);
+                    setErrorState(ErrorState.CLOSE_CLEAN, null);
+                }
             }
         }
 
@@ -1345,24 +1337,23 @@ public class Http11Processor extends AbstractProcessor {
         InputFilter[] inputFilters = inputBuffer.getFilters();
 
         // Parse transfer-encoding header
-        MessageBytes transferEncodingValueMB = null;
         if (http11) {
-            transferEncodingValueMB = headers.getValue("transfer-encoding");
-        }
-        if (transferEncodingValueMB != null) {
-            String transferEncodingValue = transferEncodingValueMB.toString();
-            // Parse the comma separated list. "identity" codings are ignored
-            int startPos = 0;
-            int commaPos = transferEncodingValue.indexOf(',');
-            String encodingName = null;
-            while (commaPos != -1) {
-                encodingName = transferEncodingValue.substring(startPos, commaPos);
+            MessageBytes transferEncodingValueMB = headers.getValue("transfer-encoding");
+            if (transferEncodingValueMB != null) {
+                String transferEncodingValue = transferEncodingValueMB.toString();
+                // Parse the comma separated list. "identity" codings are ignored
+                int startPos = 0;
+                int commaPos = transferEncodingValue.indexOf(',');
+                String encodingName = null;
+                while (commaPos != -1) {
+                    encodingName = transferEncodingValue.substring(startPos, commaPos);
+                    addInputFilter(inputFilters, encodingName);
+                    startPos = commaPos + 1;
+                    commaPos = transferEncodingValue.indexOf(',', startPos);
+                }
+                encodingName = transferEncodingValue.substring(startPos);
                 addInputFilter(inputFilters, encodingName);
-                startPos = commaPos + 1;
-                commaPos = transferEncodingValue.indexOf(',', startPos);
             }
-            encodingName = transferEncodingValue.substring(startPos);
-            addInputFilter(inputFilters, encodingName);
         }
 
         // Parse content-length header
@@ -1531,7 +1522,7 @@ public class Http11Processor extends AbstractProcessor {
         // Add date header unless application has already set one (e.g. in a
         // Caching Filter)
         if (headers.getValue("Date") == null) {
-            headers.setValue("Date").setString(
+            headers.addValue("Date").setString(
                     FastHttpDateFormat.getCurrentDate());
         }
 

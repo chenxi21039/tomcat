@@ -62,8 +62,7 @@ import org.apache.tomcat.util.res.StringManager;
 public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot {
 
     private static final Log log = LogFactory.getLog(StandardRoot.class);
-    protected static final StringManager sm =
-            StringManager.getManager(Constants.Package);
+    protected static final StringManager sm = StringManager.getManager(StandardRoot.class);
 
     private Context context;
     private boolean allowLinking = false;
@@ -563,7 +562,7 @@ public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot 
     /**
      * Class loader resources are handled by treating JARs in WEB-INF/lib as
      * resource JARs (without the internal META-INF/resources/ prefix) mounted
-     * at WEB-INF/claasses (rather than the web app root). This enables reuse
+     * at WEB-INF/classes (rather than the web app root). This enables reuse
      * of the resource handling plumbing.
      *
      * These resources are marked as class loader only so they are only used in

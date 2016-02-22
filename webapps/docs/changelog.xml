@@ -68,6 +68,49 @@
         <bug>58988</bug>: Special characters in the substitutions for the RewriteValve
         can now be quoted with a backslash. (fschumacher)
       </add>
+      <fix>
+        <bug>58999</bug>: Fix class and resource name filtering in WebappClassLoader.
+        It throws a StringIndexOutOfBoundsException if the name is exactly
+        "org" or "javax". (rjung)
+      </fix>
+      <add>
+        Add JASPIC (JSR-196) support. (markt)
+      </add>
+      <add>
+        Make checking for var and map replacement in RewriteValve a bit stricter and
+        correct detection of colon in var replacement. (fschumacher)
+      </add>
+      <fix>
+        Refactor the web application class loader to reduce the impact of JAR
+        scanning on the memory footprint of the web application. (markt)
+      </fix>
+      <fix>
+        Fix some resource leaks in the error handling for accessing files from
+        JARs and WARs. (markt)
+      </fix>
+      <fix>
+        Refactor the JAR and JAR-in-WAR resource handling to reduce the memory
+        footprint of the web application. (markt)
+      </fix>
+      <fix>
+        Refactor the web.xml parsing so a new parser is created every time the
+        web application starts rather than creating and caching the parser when
+        the Context is created. This enables the parser to take account of
+        modified Context configuration parameters and reduces (slightly) the
+        memory footprint of a running Tomcat instance. (markt)
+      </fix>
+      <update>
+        Switch to the web application class loader to the
+        <code>ParallelWebappClassLoader</code> by default. (markt)
+      </update>
+      <fix>
+        <bug>57809</bug>: Remove the custom context attribute that held the
+        effective web.xml. Components needing access to configuration
+        information may access it via the Servlet API. (markt)
+      </fix>
+      <fix>
+        Refactor JAR scanning to reduce memory footprint. (markt)
+      </fix>
     </changelog>
   </subsection>
   <subsection name="Coyote">
@@ -75,6 +118,12 @@
       <fix>
         Handle the case in the NIO2 connector where the required TLS buffer
         sizes increase after the connection has been initiated. (markt/remm)
+      </fix>
+      <fix>
+        Bad processing of handshake errors in NIO2. (remm)
+      </fix>
+      <fix>
+        Use JSSE session configuration options with OpenSSL. (remm)
       </fix>
     </changelog>
   </subsection>
@@ -131,7 +180,7 @@
         invalid location. (markt)
       </fix>
       <scode>
-        <bug>58827</bug>: Remove remains of JSR-77 implementaion. (markt)
+        <bug>58827</bug>: Remove remains of JSR-77 implementation. (markt)
       </scode>
       <fix>
         <bug>58946</bug>: Ensure that the request parameter map remains

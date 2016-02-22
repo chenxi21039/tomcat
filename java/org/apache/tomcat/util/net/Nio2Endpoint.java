@@ -1666,7 +1666,9 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
                         if (socket.getSocket() != null) {
                             // For STOP there is no point trying to handshake as the
                             // Poller has been stopped.
-                            if (socket.getSocket().isHandshakeComplete() ||
+                            if (!socket.getSocket().isHandshakeComplete() && status == SocketEvent.ERROR) {
+                                handshake = -1;
+                            } else if (socket.getSocket().isHandshakeComplete() ||
                                     status == SocketEvent.STOP ||
                                     status == SocketEvent.ERROR) {
                                 handshake = 0;
@@ -1705,7 +1707,6 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
                                 }
                             }
                         } else if (state == SocketState.UPGRADING) {
-                            socket.setKeptAlive(true);
                             launch = true;
                         }
                     } else if (handshake == -1 ) {
