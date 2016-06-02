@@ -455,11 +455,11 @@ public abstract class AuthenticatorBase extends ValveBase
             messageInfo = new MessageInfoImpl(request.getRequest(), response.getResponse(), true);
             try {
                 ServerAuthConfig serverAuthConfig = jaspicProvider.getServerAuthConfig(
-                        "HttpServlet", jaspicAppContextID, new CallbackHandlerImpl());
+                        "HttpServlet", jaspicAppContextID, CallbackHandlerImpl.getInstance());
                 String authContextID = serverAuthConfig.getAuthContextID(messageInfo);
                 serverAuthContext = serverAuthConfig.getAuthContext(authContextID, null, null);
             } catch (AuthException e) {
-                // TODO: i18n log this
+                log.warn(sm.getString("authenticator.jaspicServerAuthContextFail"), e);
                 response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                 return;
             }
@@ -637,7 +637,7 @@ public abstract class AuthenticatorBase extends ValveBase
                 request.setRequest((HttpServletRequest) messageInfo.getRequestMessage());
                 response.setResponse((HttpServletResponse) messageInfo.getResponseMessage());
             } catch (AuthException e) {
-                // TODO Log this. Change the status code?
+                log.warn(sm.getString("authenticator.jaspicSecureResponseFail"), e);
             }
         }
     }
@@ -699,7 +699,7 @@ public abstract class AuthenticatorBase extends ValveBase
             // No JASPIC configuration. Use the standard authenticator.
             return authenticate(request, response);
         } else {
-            checkForCachedAuthentication(request, response, false);
+            boolean cachedAuth = checkForCachedAuthentication(request, response, false);
             Subject client = new Subject();
             AuthStatus authStatus;
             try {
@@ -720,7 +720,10 @@ public abstract class AuthenticatorBase extends ValveBase
                 if (principal == null) {
                     request.setUserPrincipal(null);
                     request.setAuthType(null);
-                } else {
+                } else if (cachedAuth == false ||
+                        !principal.getUserPrincipal().equals(request.getUserPrincipal())) {
+                    // Skip registration if authentication credentials were
+                    // cached and the Principal did not change.
                     request.setNote(Constants.REQ_JASPIC_SUBJECT_NOTE, client);
                     @SuppressWarnings("rawtypes")// JASPIC API uses raw types
                     Map map = messageInfo.getMap();
@@ -912,7 +915,9 @@ public abstract class AuthenticatorBase extends ValveBase
         Session session = request.getSessionInternal(false);
 
         if (session != null) {
-            if (changeSessionIdOnAuthentication) {
+            // If the principal is null then this is a logout. No need to change
+            // the session ID. See BZ 59043.
+            if (changeSessionIdOnAuthentication && principal != null) {
                 String oldId = null;
                 if (log.isDebugEnabled()) {
                     oldId = session.getId();
@@ -1053,7 +1058,7 @@ public abstract class AuthenticatorBase extends ValveBase
             ServerAuthContext serverAuthContext;
             try {
                 ServerAuthConfig serverAuthConfig = provider.getServerAuthConfig("HttpServlet",
-                        jaspicAppContextID, new CallbackHandlerImpl());
+                        jaspicAppContextID, CallbackHandlerImpl.getInstance());
                 String authContextID = serverAuthConfig.getAuthContextID(messageInfo);
                 serverAuthContext = serverAuthConfig.getAuthContext(authContextID, null, null);
                 serverAuthContext.cleanSubject(messageInfo, client);
@@ -1076,8 +1081,6 @@ public abstract class AuthenticatorBase extends ValveBase
      */
     @Override
     protected synchronized void startInternal() throws LifecycleException {
-
-        // TODO: Handle JASPIC and parallel deployment
         ServletContext servletContext = context.getServletContext();
         jaspicAppContextID = servletContext.getVirtualServerName() + " " +
                 servletContext.getContextPath();

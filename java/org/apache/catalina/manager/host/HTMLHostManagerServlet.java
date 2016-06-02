@@ -94,7 +94,8 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
         } else if (command.equals("/list")) {
             // Nothing to do - always generate list
         } else if (command.equals("/add") || command.equals("/remove") ||
-                command.equals("/start") || command.equals("/stop")) {
+                command.equals("/start") || command.equals("/stop") ||
+                command.equals("/persist")) {
             message = smClient.getString(
                     "hostManagerServlet.postCommand", command);
         } else {
@@ -143,6 +144,8 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
             message = start(name, smClient);
         } else if (command.equals("/stop")) {
             message = stop(name, smClient);
+        } else if (command.equals("/persist")) {
+            message = persist(smClient);
         } else {
             //Try GET
             doGet(request, response);
@@ -227,6 +230,23 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
 
 
     /**
+     * Persist the current configuration to server.xml.
+     *
+     * @param smClient i18n resources localized for the client
+     * @return output
+     */
+    protected String persist(StringManager smClient) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.persist(printWriter, smClient);
+
+        return stringWriter.toString();
+    }
+
+
+    /**
      * Render a HTML list of the currently active Contexts in our virtual host,
      * and memory and server status information.
      *
@@ -254,8 +274,8 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
         Object[] args = new Object[2];
         args[0] = request.getContextPath();
         args[1] = smClient.getString("htmlHostManagerServlet.title");
-        writer.print(MessageFormat.format
-                     (Constants.BODY_HEADER_SECTION, args));
+        writer.print(MessageFormat.format(
+                org.apache.catalina.manager.Constants.BODY_HEADER_SECTION, args));
 
         // Message Section
         args = new Object[3];
@@ -362,10 +382,10 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
                 args[3] = hostsRemove;
                 if (host == this.installedHost) {
                     writer.print(MessageFormat.format(
-                        MANAGER_HOST_ROW_BUTTON_SECTION, args));
+                            MANAGER_HOST_ROW_BUTTON_SECTION, args));
                 } else {
                     writer.print(MessageFormat.format(
-                        HOSTS_ROW_BUTTON_SECTION, args));
+                            HOSTS_ROW_BUTTON_SECTION, args));
                 }
             }
         }
@@ -412,6 +432,14 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
         args = new Object[1];
         args[0] = smClient.getString("htmlHostManagerServlet.addButton");
         writer.print(MessageFormat.format(ADD_SECTION_END, args));
+
+        // Persist Configuration Section
+        args = new Object[4];
+        args[0] = smClient.getString("htmlHostManagerServlet.persistTitle");
+        args[1] = response.encodeURL(request.getContextPath() + "/html/persist");
+        args[2] = smClient.getString("htmlHostManagerServlet.persistAllButton");
+        args[3] = smClient.getString("htmlHostManagerServlet.persistAll");
+        writer.print(MessageFormat.format(PERSIST_SECTION, args));
 
         // Server Header Section
         args = new Object[7];
@@ -551,5 +579,21 @@ public final class HTMLHostManagerServlet extends HostManagerServlet {
         "</table>\n" +
         "<br>\n" +
         "\n";
+
+        private static final String PERSIST_SECTION =
+                "<table border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n" +
+                "<tr>\n" +
+                " <td class=\"title\">{0}</td>\n" +
+                "</tr>\n" +
+                "<tr>\n" +
+                " <td class=\"row-left\">\n" +
+                "  <form class=\"inline\" method=\"POST\" action=\"{1}\">" +
+                "   <small><input type=\"submit\" value=\"{2}\"></small>" +
+                "  </form> {3}\n" +
+                " </td>\n" +
+                "</tr>\n" +
+                "</table>\n" +
+                "<br>\n" +
+                "\n";
 
 }

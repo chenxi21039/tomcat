@@ -144,7 +144,6 @@
         children="true"
         tagClass="org.apache.catalina.Manager"
         storeFactoryClass="org.apache.catalina.storeconfig.ManagerSF">
-        <TransientAttribute>distributable</TransientAttribute>
         <TransientAttribute>domain</TransientAttribute>
     </Description>
     <Description
@@ -154,7 +153,6 @@
         children="true"
         tagClass="org.apache.catalina.session.PersistentManager"
         storeFactoryClass="org.apache.catalina.storeconfig.PersistentManagerSF">
-        <TransientAttribute>distributable</TransientAttribute>
      </Description>
      <Description
         tag="Store"
@@ -210,6 +208,7 @@
         default="false"
         tagClass="org.apache.catalina.loader.WebappLoader"
         storeFactoryClass="org.apache.catalina.storeconfig.LoaderSF">
+        <TransientAttribute>domain</TransientAttribute>
      </Description>
      <Description
         tag="Listener"
@@ -386,6 +385,8 @@
         default="false"
         tagClass="org.apache.catalina.tribes.ChannelReceiver"
         storeFactoryClass="org.apache.catalina.storeconfig.StoreFactoryBase">
+        <TransientAttribute>bind</TransientAttribute>
+        <TransientAttribute>host</TransientAttribute>
      </Description>
      <Description
         tag="Membership"
@@ -455,9 +456,9 @@
      </Description>
      <Description
         tag="CookieProcessor"
-        standard="true"
+        standard="false"
         default="false"
-        tagClass="org.apache.tomcat.util.http.LegacyCookieProcessor"
+        tagClass="org.apache.tomcat.util.http.CookieProcessor"
         storeFactoryClass="org.apache.catalina.storeconfig.StoreFactoryBase">
      </Description>
      <Description

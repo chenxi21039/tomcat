@@ -26,7 +26,7 @@ import org.apache.coyote.Adapter;
 import org.apache.coyote.AsyncContextCallback;
 import org.apache.coyote.ContainerThreadMarker;
 import org.apache.coyote.ErrorState;
-import org.apache.coyote.Request;
+import org.apache.coyote.PushToken;
 import org.apache.coyote.UpgradeToken;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
@@ -130,8 +130,8 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
             try {
                 stream.flushData();
             } catch (IOException ioe) {
-                response.setErrorException(ioe);
                 setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+                response.setErrorException(ioe);
             }
             break;
         }
@@ -316,6 +316,10 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
             result.set(asyncStateMachine.asyncTimeout());
             break;
         }
+        case ASYNC_POST_PROCESS: {
+            asyncStateMachine.asyncPostProcess();
+            break;
+        }
 
         // Servlet 3.1 non-blocking I/O
         case REQUEST_BODY_FULLY_READ: {
@@ -345,21 +349,29 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
             break;
         }
 
+        // Servlet 3.1 HTTP Upgrade
+        case UPGRADE: {
+            // Unsupported / illegal under HTTP/2
+            throw new UnsupportedOperationException(
+                    sm.getString("streamProcessor.httpupgrade.notsupported"));
+        }
+
         // Servlet 4.0 Push requests
+        case IS_PUSH_SUPPORTED: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(stream.isPushSupported());
+            break;
+        }
         case PUSH_REQUEST: {
             try {
-                stream.push((Request) param);
+                PushToken pushToken = (PushToken) param;
+                pushToken.setResult(stream.push(pushToken.getPushTarget()));
             } catch (IOException ioe) {
-                response.setErrorException(ioe);
                 setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+                response.setErrorException(ioe);
             }
             break;
         }
-
-        // Unsupported / illegal under HTTP/2
-        case UPGRADE:
-            throw new UnsupportedOperationException(
-                    sm.getString("streamProcessor.httpupgrade.notsupported"));
         }
     }
 

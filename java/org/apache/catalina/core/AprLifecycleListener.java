@@ -66,9 +66,9 @@ public class AprLifecycleListener
 
     protected static final int TCN_REQUIRED_MAJOR = 1;
     protected static final int TCN_REQUIRED_MINOR = 2;
-    protected static final int TCN_REQUIRED_PATCH = 2;
+    protected static final int TCN_REQUIRED_PATCH = 6;
     protected static final int TCN_RECOMMENDED_MINOR = 2;
-    protected static final int TCN_RECOMMENDED_PV = 2;
+    protected static final int TCN_RECOMMENDED_PV = 6;
 
 
     // ---------------------------------------------- Properties
@@ -79,6 +79,7 @@ public class AprLifecycleListener
     protected static boolean aprInitialized = false;
     protected static boolean aprAvailable = false;
     protected static boolean useAprConnector = false;
+    protected static boolean useOpenSSL = true;
     protected static boolean fipsModeActive = false;
 
     /**
@@ -252,6 +253,11 @@ public class AprLifecycleListener
                 Boolean.valueOf(Library.APR_HAS_SENDFILE),
                 Boolean.valueOf(Library.APR_HAS_SO_ACCEPTFILTER),
                 Boolean.valueOf(Library.APR_HAS_RANDOM)));
+
+        initInfoLogMessages.add(sm.getString("aprListener.config",
+                Boolean.valueOf(useAprConnector),
+                Boolean.valueOf(useOpenSSL)));
+
         aprAvailable = true;
     }
 
@@ -403,6 +409,16 @@ public class AprLifecycleListener
 
     public static boolean getUseAprConnector() {
         return useAprConnector;
+    }
+
+    public void setUseOpenSSL(boolean useOpenSSL) {
+        if (useOpenSSL != AprLifecycleListener.useOpenSSL) {
+            AprLifecycleListener.useOpenSSL = useOpenSSL;
+        }
+    }
+
+    public static boolean getUseOpenSSL() {
+        return useOpenSSL;
     }
 
 }

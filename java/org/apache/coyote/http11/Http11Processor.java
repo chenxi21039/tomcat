@@ -196,8 +196,15 @@ public class Http11Processor extends AbstractProcessor {
     /**
      * Allow a customized the server header for the tin-foil hat folks.
      */
-    protected String server = null;
+    private String server = null;
 
+
+    /*
+     * Should application provider values for the HTTP Server header be removed.
+     * Note that if {@link #server} is set, any application provided vale will
+     * be over-ridden.
+     */
+    private boolean serverRemoveAppProvidedValues = false;
 
     /**
      * Instance of the new protocol to use after the HTTP connection has been
@@ -479,6 +486,11 @@ public class Http11Processor extends AbstractProcessor {
     }
 
 
+    public void setServerRemoveAppProvidedValues(boolean serverRemoveAppProvidedValues) {
+        this.serverRemoveAppProvidedValues = serverRemoveAppProvidedValues;
+    }
+
+
     /**
      * Check if the resource could be compressed, if the client supports it.
      */
@@ -683,20 +695,8 @@ public class Http11Processor extends AbstractProcessor {
             }
             break;
         }
-        case IS_ERROR: {
-            ((AtomicBoolean) param).set(getErrorState().isError());
-            break;
-        }
-        case DISABLE_SWALLOW_INPUT: {
-            // Do not swallow request input and make sure we are closing the
-            // connection
-            setErrorState(ErrorState.CLOSE_CLEAN, null);
-            inputBuffer.setSwallowInput(false);
-            break;
-        }
-        case RESET: {
-            // Note: This must be called before the response is committed
-            outputBuffer.reset();
+        case AVAILABLE: {
+            request.setAvailable(inputBuffer.available(Boolean.TRUE.equals(param)));
             break;
         }
         case REQ_SET_BODY_REPLAY: {
@@ -709,109 +709,15 @@ public class Http11Processor extends AbstractProcessor {
             internalBuffer.addActiveFilter(savedBody);
             break;
         }
-        case ASYNC_START: {
-            asyncStateMachine.asyncStart((AsyncContextCallback) param);
+        case RESET: {
+            // Note: This must be called before the response is committed
+            outputBuffer.reset();
             break;
         }
-        case ASYNC_DISPATCHED: {
-            asyncStateMachine.asyncDispatched();
-            break;
-        }
-        case ASYNC_TIMEOUT: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(asyncStateMachine.asyncTimeout());
-            break;
-        }
-        case ASYNC_RUN: {
-            asyncStateMachine.asyncRun((Runnable) param);
-            break;
-        }
-        case ASYNC_ERROR: {
-            asyncStateMachine.asyncError();
-            break;
-        }
-        case ASYNC_IS_STARTED: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncStarted());
-            break;
-        }
-        case ASYNC_IS_COMPLETING: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isCompleting());
-            break;
-        }
-        case ASYNC_IS_DISPATCHING: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncDispatching());
-            break;
-        }
-        case ASYNC_IS_ASYNC: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsync());
-            break;
-        }
-        case ASYNC_IS_TIMINGOUT: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncTimingOut());
-            break;
-        }
-        case ASYNC_IS_ERROR: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncError());
-            break;
-        }
-        case ASYNC_COMPLETE: {
-            clearDispatches();
-            if (asyncStateMachine.asyncComplete()) {
-                socketWrapper.processSocket(SocketEvent.OPEN_READ, true);
-            }
-            break;
-        }
-        case ASYNC_SETTIMEOUT: {
-            if (param == null) {
-                return;
-            }
-            long timeout = ((Long) param).longValue();
-            setAsyncTimeout(timeout);
-            break;
-        }
-        case ASYNC_DISPATCH: {
-            if (asyncStateMachine.asyncDispatch()) {
-                socketWrapper.processSocket(SocketEvent.OPEN_READ, true);
-            }
-            break;
-        }
-        case UPGRADE: {
-            upgradeToken = (UpgradeToken) param;
-            // Stop further HTTP output
-            outputBuffer.finished = true;
-            break;
-        }
-        case AVAILABLE: {
-            request.setAvailable(inputBuffer.available(Boolean.TRUE.equals(param)));
-            break;
-        }
-        case NB_WRITE_INTEREST: {
-            AtomicBoolean isReady = (AtomicBoolean)param;
-            isReady.set(outputBuffer.isReady());
-            break;
-        }
-        case NB_READ_INTEREST: {
-            socketWrapper.registerReadInterest();
-            break;
-        }
-        case REQUEST_BODY_FULLY_READ: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(inputBuffer.isFinished());
-            break;
-        }
-        case DISPATCH_READ: {
-            addDispatch(DispatchType.NON_BLOCKING_READ);
-            break;
-        }
-        case DISPATCH_WRITE: {
-            addDispatch(DispatchType.NON_BLOCKING_WRITE);
-            break;
-        }
-        case DISPATCH_EXECUTE: {
-            SocketWrapperBase<?> wrapper = socketWrapper;
-            if (wrapper != null) {
-                wrapper.executeNonBlockingDispatches(getIteratorAndClearDispatches());
-            }
+
+        // Error handling
+        case IS_ERROR: {
+            ((AtomicBoolean) param).set(getErrorState().isError());
             break;
         }
         case CLOSE_NOW: {
@@ -820,6 +726,19 @@ public class Http11Processor extends AbstractProcessor {
             setErrorState(ErrorState.CLOSE_NOW, null);
             break;
         }
+        case DISABLE_SWALLOW_INPUT: {
+            // Do not swallow request input and make sure we are closing the
+            // connection
+            setErrorState(ErrorState.CLOSE_CLEAN, null);
+            inputBuffer.setSwallowInput(false);
+            break;
+        }
+        case END_REQUEST: {
+            endRequest();
+            break;
+        }
+
+        // Request attribute support
         case REQ_HOST_ADDR_ATTRIBUTE: {
             if (socketWrapper == null) {
                 request.remoteAddr().recycle();
@@ -836,19 +755,11 @@ public class Http11Processor extends AbstractProcessor {
             }
             break;
         }
-        case REQ_REMOTEPORT_ATTRIBUTE: {
+        case REQ_LOCALPORT_ATTRIBUTE: {
             if (socketWrapper == null) {
-                request.setRemotePort(0);
+                request.setLocalPort(0);
             } else {
-                request.setRemotePort(socketWrapper.getRemotePort());
-            }
-            break;
-        }
-        case REQ_LOCAL_NAME_ATTRIBUTE: {
-            if (socketWrapper == null) {
-                request.localName().recycle();
-            } else {
-                request.localName().setString(socketWrapper.getLocalName());
+                request.setLocalPort(socketWrapper.getLocalPort());
             }
             break;
         }
@@ -860,14 +771,24 @@ public class Http11Processor extends AbstractProcessor {
             }
             break;
         }
-        case REQ_LOCALPORT_ATTRIBUTE: {
+        case REQ_LOCAL_NAME_ATTRIBUTE: {
             if (socketWrapper == null) {
-                request.setLocalPort(0);
+                request.localName().recycle();
             } else {
-                request.setLocalPort(socketWrapper.getLocalPort());
+                request.localName().setString(socketWrapper.getLocalName());
             }
             break;
         }
+        case REQ_REMOTEPORT_ATTRIBUTE: {
+            if (socketWrapper == null) {
+                request.setRemotePort(0);
+            } else {
+                request.setRemotePort(socketWrapper.getRemotePort());
+            }
+            break;
+        }
+
+        // SSL request attribute support
         case REQ_SSL_ATTRIBUTE: {
             try {
                 if (sslSupport != null) {
@@ -904,7 +825,7 @@ public class Http11Processor extends AbstractProcessor {
             break;
         }
         case REQ_SSL_CERTIFICATE: {
-            if (sslSupport != null && socketWrapper.getSocket() != null) {
+            if (sslSupport != null) {
                 // Consume and buffer the request body, so that it does not
                 // interfere with the client's handshake messages
                 InputFilter[] inputFilters = inputBuffer.getFilters();
@@ -924,12 +845,125 @@ public class Http11Processor extends AbstractProcessor {
             }
             break;
         }
-        case END_REQUEST: {
-            endRequest();
+
+        // Servlet 3.0 asynchronous support
+        case ASYNC_START: {
+            asyncStateMachine.asyncStart((AsyncContextCallback) param);
+            break;
+        }
+        case ASYNC_COMPLETE: {
+            clearDispatches();
+            if (asyncStateMachine.asyncComplete()) {
+                socketWrapper.processSocket(SocketEvent.OPEN_READ, true);
+            }
+            break;
+        }
+        case ASYNC_DISPATCH: {
+            if (asyncStateMachine.asyncDispatch()) {
+                socketWrapper.processSocket(SocketEvent.OPEN_READ, true);
+            }
+            break;
+        }
+        case ASYNC_DISPATCHED: {
+            asyncStateMachine.asyncDispatched();
+            break;
+        }
+        case ASYNC_ERROR: {
+            asyncStateMachine.asyncError();
+            break;
+        }
+        case ASYNC_IS_ASYNC: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsync());
+            break;
+        }
+        case ASYNC_IS_COMPLETING: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isCompleting());
+            break;
+        }
+        case ASYNC_IS_DISPATCHING: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncDispatching());
+            break;
+        }
+        case ASYNC_IS_ERROR: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncError());
+            break;
+        }
+        case ASYNC_IS_STARTED: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncStarted());
+            break;
+        }
+        case ASYNC_IS_TIMINGOUT: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncTimingOut());
+            break;
+        }
+        case ASYNC_RUN: {
+            asyncStateMachine.asyncRun((Runnable) param);
+            break;
+        }
+        case ASYNC_SETTIMEOUT: {
+            if (param == null) {
+                return;
+            }
+            long timeout = ((Long) param).longValue();
+            setAsyncTimeout(timeout);
+            break;
+        }
+        case ASYNC_TIMEOUT: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(asyncStateMachine.asyncTimeout());
+            break;
+        }
+        case ASYNC_POST_PROCESS: {
+            asyncStateMachine.asyncPostProcess();
+            break;
+        }
+
+        // Servlet 3.1 non-blocking I/O
+        case REQUEST_BODY_FULLY_READ: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(inputBuffer.isFinished());
+            break;
+        }
+        case NB_READ_INTEREST: {
+            socketWrapper.registerReadInterest();
+            break;
+        }
+        case NB_WRITE_INTEREST: {
+            AtomicBoolean isReady = (AtomicBoolean)param;
+            isReady.set(outputBuffer.isReady());
+            break;
+        }
+        case DISPATCH_READ: {
+            addDispatch(DispatchType.NON_BLOCKING_READ);
+            break;
+        }
+        case DISPATCH_WRITE: {
+            addDispatch(DispatchType.NON_BLOCKING_WRITE);
+            break;
+        }
+        case DISPATCH_EXECUTE: {
+            SocketWrapperBase<?> wrapper = socketWrapper;
+            if (wrapper != null) {
+                wrapper.executeNonBlockingDispatches(getIteratorAndClearDispatches());
+            }
+            break;
+        }
+
+        // Servlet 3.1 HTTP Upgrade
+        case UPGRADE: {
+            upgradeToken = (UpgradeToken) param;
+            // Stop further HTTP output
+            outputBuffer.finished = true;
             break;
         }
 
         // Servlet 4.0 Push requests
+        case IS_PUSH_SUPPORTED: {
+            // HTTP2 connections only. Unsupported for HTTP/1.x
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(false);
+            break;
+        }
         case PUSH_REQUEST: {
             // HTTP2 connections only. Unsupported for AJP.
             throw new UnsupportedOperationException(
@@ -962,7 +996,9 @@ public class Http11Processor extends AbstractProcessor {
             // Parsing the request header
             try {
                 if (!inputBuffer.parseRequestLine(keptAlive)) {
-                    if (handleIncompleteRequestLineRead()) {
+                    if (inputBuffer.getParsingRequestLinePhase() == -1) {
+                        return SocketState.UPGRADING;
+                    } else if (handleIncompleteRequestLineRead()) {
                         break;
                     }
                 }
@@ -1081,10 +1117,8 @@ public class Http11Processor extends AbstractProcessor {
                     // set the status to 500 and set the errorException.
                     // If we fail here, then the response is likely already
                     // committed, so we can't try and set headers.
-                    if(keepAlive && !getErrorState().isError() && (
-                            response.getErrorException() != null ||
-                                    (!isAsync() &&
-                                    statusDropsConnection(response.getStatus())))) {
+                    if(keepAlive && !getErrorState().isError() && !isAsync() &&
+                            statusDropsConnection(response.getStatus())) {
                         setErrorState(ErrorState.CLOSE_CLEAN, null);
                     }
                 } catch (InterruptedIOException e) {
@@ -1557,12 +1591,13 @@ public class Http11Processor extends AbstractProcessor {
         outputBuffer.sendStatus();
 
         // Add server header
-        if (server != null) {
-            // Always overrides anything the app might set
+        if (server == null) {
+            if (serverRemoveAppProvidedValues) {
+                headers.removeHeader("server");
+            }
+        } else {
+            // server always overrides anything the app might set
             headers.setValue("Server").setString(server);
-        } else if (headers.getValue("Server") == null) {
-            // If app didn't set the header, use the default
-            outputBuffer.write(Constants.SERVER_BYTES);
         }
 
         int size = headers.size();

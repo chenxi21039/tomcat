@@ -996,10 +996,11 @@ public class Connector extends LifecycleMBeanBase  {
                             getProtocolHandlerClassName()));
         }
         if (AprLifecycleListener.isAprAvailable() &&
+                AprLifecycleListener.getUseOpenSSL() &&
                 protocolHandler instanceof AbstractHttp11JsseProtocol) {
             AbstractHttp11JsseProtocol<?> jsseProtocolHandler =
                     (AbstractHttp11JsseProtocol<?>) protocolHandler;
-            if (jsseProtocolHandler.getSslImplementationName() == null) {
+            if (jsseProtocolHandler.isSSLEnabled() && jsseProtocolHandler.getSslImplementationName() == null) {
                 // OpenSSL is compatible with the JSSE configuration, so use it if APR is available
                 jsseProtocolHandler.setSslImplementationName(OpenSSLImplementation.class.getName());
             }

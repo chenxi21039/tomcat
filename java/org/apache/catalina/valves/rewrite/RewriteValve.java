@@ -45,10 +45,10 @@ import org.apache.catalina.connector.Connector;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.catalina.util.URLEncoder;
-import org.apache.catalina.util.UriUtil;
 import org.apache.catalina.valves.ValveBase;
 import org.apache.tomcat.util.buf.CharChunk;
 import org.apache.tomcat.util.buf.MessageBytes;
+import org.apache.tomcat.util.buf.UriUtil;
 import org.apache.tomcat.util.http.RequestUtil;
 
 public class RewriteValve extends ValveBase {
@@ -689,12 +689,12 @@ public class RewriteValve extends ValveBase {
             rule.setHost(true);
         } else if (flag.startsWith("last") || flag.startsWith("L")) {
             rule.setLast(true);
-        } else if (flag.startsWith("next") || flag.startsWith("N")) {
-            rule.setNext(true);
         } else if (flag.startsWith("nocase") || flag.startsWith("NC")) {
             rule.setNocase(true);
         } else if (flag.startsWith("noescape") || flag.startsWith("NE")) {
             rule.setNoescape(true);
+        } else if (flag.startsWith("next") || flag.startsWith("N")) {
+            rule.setNext(true);
         // FIXME: Proxy not supported, would require proxy capabilities in Tomcat
         /* } else if (flag.startsWith("proxy") || flag.startsWith("P")) {
             rule.setProxy(true);*/

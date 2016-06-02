@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -51,6 +50,7 @@ import org.apache.tomcat.jni.Socket;
 import org.apache.tomcat.jni.Status;
 import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.buf.ByteBufferUtils;
+import org.apache.tomcat.util.collections.SynchronizedStack;
 import org.apache.tomcat.util.net.AbstractEndpoint.Acceptor.AcceptorState;
 import org.apache.tomcat.util.net.AbstractEndpoint.Handler.SocketState;
 import org.apache.tomcat.util.net.SSLHostConfig.Type;
@@ -105,6 +105,7 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
 
 
     private final Map<Long,AprSocketWrapper> connections = new ConcurrentHashMap<>();
+
 
     // ------------------------------------------------------------ Constructor
 
@@ -417,83 +418,32 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
                             sm.getString("endpoint.apr.failSslContextMake"), e);
                 }
 
-                boolean legacyRenegSupported = false;
-                try {
-                    legacyRenegSupported = SSL.hasOp(SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
-                    if (legacyRenegSupported)
-                        if (sslHostConfig.getInsecureRenegotiation()) {
-                            SSLContext.setOptions(ctx, SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
-                        } else {
-                            SSLContext.clearOptions(ctx, SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
-                        }
-                } catch (UnsatisfiedLinkError e) {
-                    // Ignore
-                }
-                if (!legacyRenegSupported) {
-                    // OpenSSL does not support unsafe legacy renegotiation.
-                    log.warn(sm.getString("endpoint.warn.noInsecureReneg",
-                                          SSL.versionString()));
+                if (sslHostConfig.getInsecureRenegotiation()) {
+                    SSLContext.setOptions(ctx, SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
+                } else {
+                    SSLContext.clearOptions(ctx, SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
                 }
 
                 // Use server's preference order for ciphers (rather than
                 // client's)
-                boolean orderCiphersSupported = false;
-                try {
-                    orderCiphersSupported = SSL.hasOp(SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
-                    if (orderCiphersSupported) {
-                        if (sslHostConfig.getHonorCipherOrder()) {
-                            SSLContext.setOptions(ctx, SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
-                        } else {
-                            SSLContext.clearOptions(ctx, SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
-                        }
-                    }
-                } catch (UnsatisfiedLinkError e) {
-                    // Ignore
-                }
-                if (!orderCiphersSupported) {
-                    // OpenSSL does not support ciphers ordering.
-                    log.warn(sm.getString("endpoint.warn.noHonorCipherOrder",
-                                          SSL.versionString()));
+                if (sslHostConfig.getHonorCipherOrder()) {
+                    SSLContext.setOptions(ctx, SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
+                } else {
+                    SSLContext.clearOptions(ctx, SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
                 }
 
                 // Disable compression if requested
-                boolean disableCompressionSupported = false;
-                try {
-                    disableCompressionSupported = SSL.hasOp(SSL.SSL_OP_NO_COMPRESSION);
-                    if (disableCompressionSupported) {
-                        if (sslHostConfig.getDisableCompression()) {
-                            SSLContext.setOptions(ctx, SSL.SSL_OP_NO_COMPRESSION);
-                        } else {
-                            SSLContext.clearOptions(ctx, SSL.SSL_OP_NO_COMPRESSION);
-                        }
-                    }
-                } catch (UnsatisfiedLinkError e) {
-                    // Ignore
-                }
-                if (!disableCompressionSupported) {
-                    // OpenSSL does not support ciphers ordering.
-                    log.warn(sm.getString("endpoint.warn.noDisableCompression",
-                                          SSL.versionString()));
+                if (sslHostConfig.getDisableCompression()) {
+                    SSLContext.setOptions(ctx, SSL.SSL_OP_NO_COMPRESSION);
+                } else {
+                    SSLContext.clearOptions(ctx, SSL.SSL_OP_NO_COMPRESSION);
                 }
 
                 // Disable TLS Session Tickets (RFC4507) to protect perfect forward secrecy
-                boolean disableSessionTicketsSupported = false;
-                try {
-                    disableSessionTicketsSupported = SSL.hasOp(SSL.SSL_OP_NO_TICKET);
-                    if (disableSessionTicketsSupported) {
-                        if (sslHostConfig.getDisableSessionTickets()) {
-                            SSLContext.setOptions(ctx, SSL.SSL_OP_NO_TICKET);
-                        } else {
-                            SSLContext.clearOptions(ctx, SSL.SSL_OP_NO_TICKET);
-                        }
-                    }
-                } catch (UnsatisfiedLinkError e) {
-                    // Ignore
-                }
-                if (!disableSessionTicketsSupported) {
-                    // OpenSSL is too old to support TLS Session Tickets.
-                    log.warn(sm.getString("endpoint.warn.noDisableSessionTickets",
-                                          SSL.versionString()));
+                if (sslHostConfig.getDisableSessionTickets()) {
+                    SSLContext.setOptions(ctx, SSL.SSL_OP_NO_TICKET);
+                } else {
+                    SSLContext.clearOptions(ctx, SSL.SSL_OP_NO_TICKET);
                 }
 
                 // List the ciphers that the client is permitted to negotiate
@@ -584,6 +534,9 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
             running = true;
             paused = false;
 
+            processorCache = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
+                    socketProperties.getProcessorCache());
+
             // Create worker collection
             if (getExecutor() == null) {
                 createExecutor();
@@ -673,6 +626,7 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
                 }
                 sendfile = null;
             }
+            processorCache.clear();
         }
         shutdownExecutor();
     }
@@ -849,65 +803,24 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
      * Process the given socket. Typically keep alive or upgraded protocol.
      *
      * @param socket    The socket to process
-     * @param status    The current status of the socket
+     * @param event     The event to process
      *
      * @return <code>true</code> if the processing completed normally otherwise
      *         <code>false</code> which indicates an error occurred and that the
      *         socket should be closed
      */
-    public boolean processSocket(long socket, SocketEvent status) {
-        try {
-            Executor executor = getExecutor();
-            if (executor == null) {
-                log.warn(sm.getString("endpoint.warn.noExector",
-                        Long.valueOf(socket), null));
-            } else {
-                SocketWrapperBase<Long> wrapper =
-                        connections.get(Long.valueOf(socket));
-                // Make sure connection hasn't been closed
-                if (wrapper != null) {
-                    executor.execute(new SocketProcessor(wrapper, status));
-                }
-            }
-        } catch (RejectedExecutionException x) {
-            log.warn("Socket processing request was rejected for:"+socket,x);
-            return false;
-        } catch (Throwable t) {
-            ExceptionUtils.handleThrowable(t);
-            // This means we got an OOM or similar creating a thread, or that
-            // the pool and its queue are full
-            log.error(sm.getString("endpoint.process.fail"), t);
-            return false;
-        }
-        return true;
+    protected boolean processSocket(long socket, SocketEvent event) {
+        SocketWrapperBase<Long> socketWrapper = connections.get(Long.valueOf(socket));
+        return processSocket(socketWrapper, event, true);
     }
 
 
     @Override
-    public void processSocket(SocketWrapperBase<Long> socket, SocketEvent status,
-            boolean dispatch) {
-        try {
-            // Synchronisation is required here as this code may be called as a
-            // result of calling AsyncContext.dispatch() from a non-container
-            // thread
-            synchronized (socket) {
-                SocketProcessor proc = new SocketProcessor(socket, status);
-                Executor executor = getExecutor();
-                if (dispatch && executor != null) {
-                    executor.execute(proc);
-                } else {
-                    proc.run();
-                }
-            }
-        } catch (RejectedExecutionException ree) {
-            log.warn(sm.getString("endpoint.executor.fail", socket) , ree);
-        } catch (Throwable t) {
-            ExceptionUtils.handleThrowable(t);
-            // This means we got an OOM or similar creating a thread, or that
-            // the pool and its queue are full
-            log.error(sm.getString("endpoint.process.fail"), t);
-        }
+    protected SocketProcessorBase<Long> createSocketProcessor(
+            SocketWrapperBase<Long> socketWrapper, SocketEvent event) {
+        return new SocketProcessor(socketWrapper, event);
     }
+
 
     private void closeSocket(long socket) {
         // Once this is called, the mapping from socket to wrapper will no
@@ -1549,10 +1462,9 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
                     log.debug(sm.getString("endpoint.debug.socketTimeout",
                             Long.valueOf(socket)));
                 }
-                removeFromPoller(socket);
-                destroySocket(socket);
-                addList.remove(socket);
-                closeList.remove(socket);
+                SocketWrapperBase<Long> socketWrapper = connections.get(Long.valueOf(socket));
+                socketWrapper.setError(new SocketTimeoutException());
+                processSocket(socketWrapper, SocketEvent.ERROR, true);
                 socket = timeouts.check(date);
             }
 
@@ -1844,7 +1756,7 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
                             }
                         }
 
-                        if (reset) {
+                        if (reset && pollerRunning) {
                             // Reallocate the current poller
                             int count = Poll.pollset(pollers[i], desc);
                             long newPoller = allocatePoller(actualPollerSize, pool, -1);
@@ -2295,33 +2207,27 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
      * This class is the equivalent of the Worker, but will simply use in an
      * external Executor thread pool.
      */
-    protected class SocketProcessor implements Runnable {
+    protected class SocketProcessor extends  SocketProcessorBase<Long> {
 
-        private final SocketWrapperBase<Long> socket;
-        private final SocketEvent status;
-
-        public SocketProcessor(SocketWrapperBase<Long> socket,
-                SocketEvent status) {
-            this.socket = socket;
-            if (status == null) {
-                // Should never happen
-                throw new NullPointerException();
-            }
-            this.status = status;
+        public SocketProcessor(SocketWrapperBase<Long> socketWrapper, SocketEvent event) {
+            super(socketWrapper, event);
         }
 
         @Override
-        public void run() {
-            synchronized (socket) {
+        protected void doRun() {
+            try {
                 // Process the request from this socket
-                if (socket.getSocket() == null) {
-                    // Closed in another thread
-                    return;
-                }
-                SocketState state = getHandler().process(socket, status);
+                SocketState state = getHandler().process(socketWrapper, event);
                 if (state == Handler.SocketState.CLOSED) {
                     // Close socket and pool
-                    closeSocket(socket.getSocket().longValue());
+                    closeSocket(socketWrapper.getSocket().longValue());
+                }
+            } finally {
+                socketWrapper = null;
+                event = null;
+                //return to cache
+                if (running && !paused) {
+                    processorCache.push(this);
                 }
             }
         }
@@ -2531,7 +2437,7 @@ public class AprEndpoint extends AbstractEndpoint<Long> implements SNICallBack {
 
 
         @Override
-        protected void doWriteInternal(boolean block) throws IOException {
+        protected void doWrite(boolean block) throws IOException {
             if (closed) {
                 throw new IOException(sm.getString("socket.apr.closed", getSocket()));
             }

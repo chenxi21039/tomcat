@@ -19,7 +19,6 @@ package org.apache.catalina.connector;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.MalformedURLException;
-import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.security.AccessController;
@@ -51,13 +50,13 @@ import org.apache.catalina.Wrapper;
 import org.apache.catalina.security.SecurityUtil;
 import org.apache.catalina.util.RequestUtil;
 import org.apache.catalina.util.SessionConfig;
-import org.apache.catalina.util.UriUtil;
 import org.apache.coyote.ActionCode;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.buf.CharChunk;
 import org.apache.tomcat.util.buf.UEncoder;
 import org.apache.tomcat.util.buf.UEncoder.SafeCharsSet;
+import org.apache.tomcat.util.buf.UriUtil;
 import org.apache.tomcat.util.http.FastHttpDateFormat;
 import org.apache.tomcat.util.http.MimeHeaders;
 import org.apache.tomcat.util.http.parser.MediaTypeCache;
@@ -246,7 +245,7 @@ public class Response implements HttpServletResponse {
      */
     private final List<Cookie> cookies = new ArrayList<>();
 
-    private HttpServletResponse applicationResponse = this;
+    private HttpServletResponse applicationResponse = null;
 
 
     // --------------------------------------------------------- Public Methods
@@ -1335,7 +1334,7 @@ public class Response implements HttpServletResponse {
             // Relative redirects require HTTP/1.1
             if (getRequest().getCoyoteRequest().getSupportsRelativeRedirects() &&
                     getContext().getUseRelativeRedirects()) {
-                locationUri = URI.create(location).toASCIIString();
+                locationUri = location;
             } else {
                 locationUri = toAbsolute(location);
             }

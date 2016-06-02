@@ -61,7 +61,7 @@ public final class SecurityClassLoad {
              "AccessLogAdapter");
         loader.loadClass
             (basePackage +
-             "ApplicationContextFacade$1");
+             "ApplicationContextFacade$PrivilegedExecuteMethod");
         loader.loadClass
             (basePackage +
              "ApplicationDispatcher$PrivilegedForward");
@@ -76,10 +76,10 @@ public final class SecurityClassLoad {
             "AsyncContextImpl");
         loader.loadClass
             (basePackage +
-            "AsyncContextImpl$DebugException");
+            "AsyncContextImpl$AsyncRunnable");
         loader.loadClass
             (basePackage +
-            "AsyncContextImpl$1");
+            "AsyncContextImpl$DebugException");
         loader.loadClass
             (basePackage +
             "AsyncListenerWrapper");
@@ -153,7 +153,6 @@ public final class SecurityClassLoad {
         final String basePackage = "org.apache.catalina.util.";
         loader.loadClass(basePackage + "ParameterMap");
         loader.loadClass(basePackage + "RequestUtil");
-        loader.loadClass(basePackage + "UriUtil");
     }
 
 
@@ -276,6 +275,7 @@ public final class SecurityClassLoad {
         loader.loadClass(basePackage + "util.buf.StringCache");
         loader.loadClass(basePackage + "util.buf.StringCache$ByteEntry");
         loader.loadClass(basePackage + "util.buf.StringCache$CharEntry");
+        loader.loadClass(basePackage + "util.buf.UriUtil");
         // collections
         loader.loadClass(basePackage + "util.collections.CaseInsensitiveKeyMap");
         loader.loadClass(basePackage + "util.collections.CaseInsensitiveKeyMap$EntryImpl");

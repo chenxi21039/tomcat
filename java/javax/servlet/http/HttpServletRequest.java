@@ -170,6 +170,31 @@ public interface HttpServletRequest extends ServletRequest {
      */
     public int getIntHeader(String name);
 
+    public default Mapping getMapping() {
+        return new Mapping() {
+
+            @Override
+            public String getMatchValue() {
+                return "";
+            }
+
+            @Override
+            public String getPattern() {
+                return "";
+            }
+
+            @Override
+            public MappingMatch getMappingMatch() {
+                return MappingMatch.UNKNOWN;
+            }
+
+            @Override
+            public String getServletName() {
+                return "";
+            }
+        };
+    }
+
     /**
      * Returns the name of the HTTP method with which this request was made, for
      * example, GET, POST, or PUT. Same as the value of the CGI variable
@@ -213,6 +238,18 @@ public interface HttpServletRequest extends ServletRequest {
      *         information
      */
     public String getPathTranslated();
+
+    /**
+     * Does the current request allow push requests. This will return {@code
+     * true} only if the underlying protocol supports server push and if pushes
+     * are permitted from the current request.
+     *
+     * @return {@code true} if server push is supported for the current request
+     *         otherwise {@code false}
+     */
+    public default boolean isPushSupported() {
+        return false;
+    }
 
     /**
      * Obtain a builder for generating push requests. {@link PushBuilder}

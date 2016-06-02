@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -82,8 +82,8 @@
                description="Object names of all children"
                type="[Ljavax.management.ObjectName;"/>
 
-    <attribute name="clearReferencesStatic"
-               description="Should Tomcat attempt to null out any static or final fields from loaded classes when a web application is stopped as a work around for apparent garbage collection bugs and application coding errors?"
+    <attribute name="clearReferencesRmiTargets"
+               description="Should Tomcat look for memory leaks in RMI Targets and clear them if found as a work around for application coding errors?"
                type="boolean"/>
 
     <attribute name="clearReferencesStopThreads"
@@ -122,11 +122,6 @@
     <attribute name="delegate"
                description=""
                type="boolean"/>
-
-    <attribute name="deploymentDescriptor"
-               description="String deployment descriptor "
-               type="java.lang.String"
-               writeable="false" />
 
     <attribute name="displayName"
                description="The display name of this web application"
@@ -1323,6 +1318,16 @@
                type="java.lang.String"
                writeable="false"/>
 
+    <attribute name="serverBuilt"
+               description="Tomcat server built timestamp"
+               type="java.lang.String"
+               writeable="false"/>
+
+    <attribute name="serverNumber"
+               description="Tomcat server's version number"
+               type="java.lang.String"
+               writeable="false"/>
+
     <attribute name="serviceNames"
                description="Object names of all services we know about"
                type="[Ljavax.management.ObjectName;"
@@ -1667,9 +1672,9 @@
     <operation name="findInitParameter"
                description="Add a mapping associated with the Wrapper."
                impact="ACTION"
-               returnType="void">
-      <parameter name="mapping"
-                 description="The new wrapper mapping"
+               returnType="java.lang.String">
+      <parameter name="name"
+                 description="The name of the  initialization parameter"
                  type="java.lang.String"/>
     </operation>
 

@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.servlet.http.MappingMatch;
+
 import org.apache.catalina.Context;
 import org.apache.catalina.Host;
 import org.apache.catalina.WebResource;
@@ -48,7 +50,7 @@ public final class Mapper {
 
     private static final Log log = LogFactory.getLog(Mapper.class);
 
-    static final StringManager sm = StringManager.getManager(Mapper.class);
+    private static final StringManager sm = StringManager.getManager(Mapper.class);
 
     // ----------------------------------------------------- Instance Variables
 
@@ -56,20 +58,21 @@ public final class Mapper {
     /**
      * Array containing the virtual hosts definitions.
      */
+    // Package private to facilitate testing
     volatile MappedHost[] hosts = new MappedHost[0];
 
 
     /**
      * Default host name.
      */
-    String defaultHostName = null;
+    private String defaultHostName = null;
 
 
     /**
      * Mapping from Context object to Context version to support
      * RequestDispatcher mappings.
      */
-    Map<Context, ContextVersion> contextObjectToContextVersionMap =
+    private final Map<Context, ContextVersion> contextObjectToContextVersionMap =
             new ConcurrentHashMap<>();
 
 
@@ -224,26 +227,6 @@ public final class Mapper {
         for (MappedHost alias : realHost.getAliases()) {
             alias.contextList = newContextList;
         }
-    }
-
-    /**
-     * Add a new Context to an existing Host.
-     *
-     * @param hostName Virtual host name this context belongs to
-     * @param host Host object
-     * @param path Context path
-     * @param version Context version
-     * @param context Context object
-     * @param welcomeResources Welcome files defined for this context
-     * @param resources Static resources of the context
-     * @deprecated Use {@link #addContextVersion(String, Host, String, String, Context, String[], WebResourceRoot, Collection)}
-     */
-    @Deprecated
-    public void addContextVersion(String hostName, Host host, String path,
-            String version, Context context, String[] welcomeResources,
-            WebResourceRoot resources) {
-        addContextVersion(hostName, host, path, version, context,
-                welcomeResources, resources, null);
     }
 
     /**
@@ -877,7 +860,7 @@ public final class Mapper {
         }
 
         if(mappingData.wrapper == null && noServletPath &&
-                mappingData.context.getMapperContextRootRedirectEnabled()) {
+                contextVersion.object.getMapperContextRootRedirectEnabled()) {
             // The path is empty, redirect to "/"
             path.append('/');
             pathEnd = path.getEnd();
@@ -992,6 +975,7 @@ public final class Mapper {
                     (path.getBuffer(), path.getStart(), path.getLength());
                 mappingData.wrapperPath.setChars
                     (path.getBuffer(), path.getStart(), path.getLength());
+                mappingData.matchType = MappingMatch.DEFAULT;
             }
             // Redirection to a folder
             char[] buf = path.getBuffer();
@@ -1005,7 +989,7 @@ public final class Mapper {
                     file = contextVersion.resources.getResource(pathStr);
                 }
                 if (file != null && file.isDirectory() &&
-                        mappingData.context.getMapperDirectoryRedirectEnabled()) {
+                        contextVersion.object.getMapperDirectoryRedirectEnabled()) {
                     // Note: this mutates the path: do not do any processing
                     // after this (since we set the redirectPath, there
                     // shouldn't be any)
@@ -1040,8 +1024,10 @@ public final class Mapper {
                 mappingData.wrapperPath.setString("");
                 // This seems wrong but it is what the spec says...
                 mappingData.contextPath.setString("");
+                mappingData.matchType = MappingMatch.CONTEXT_ROOT;
             } else {
                 mappingData.wrapperPath.setString(wrapper.name);
+                mappingData.matchType = MappingMatch.EXACT;
             }
         }
     }
@@ -1093,6 +1079,7 @@ public final class Mapper {
                     (path.getBuffer(), path.getOffset(), path.getLength());
                 mappingData.wrapper = wrappers[pos].object;
                 mappingData.jspWildCard = wrappers[pos].jspWildCard;
+                mappingData.matchType = MappingMatch.PATH;
             }
         }
     }
@@ -1137,6 +1124,7 @@ public final class Mapper {
                     mappingData.requestPath.setChars(buf, servletPath, pathEnd
                             - servletPath);
                     mappingData.wrapper = wrapper.object;
+                    mappingData.matchType = MappingMatch.EXTENSION;
                 }
                 path.setOffset(servletPath);
                 path.setEnd(pathEnd);

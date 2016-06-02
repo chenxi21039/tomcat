@@ -67,6 +67,7 @@ import org.apache.catalina.util.ContextName;
 import org.apache.catalina.util.Introspection;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+import org.apache.tomcat.Jar;
 import org.apache.tomcat.JarScanType;
 import org.apache.tomcat.JarScanner;
 import org.apache.tomcat.util.ExceptionUtils;
@@ -78,6 +79,7 @@ import org.apache.tomcat.util.bcel.classfile.ClassParser;
 import org.apache.tomcat.util.bcel.classfile.ElementValue;
 import org.apache.tomcat.util.bcel.classfile.ElementValuePair;
 import org.apache.tomcat.util.bcel.classfile.JavaClass;
+import org.apache.tomcat.util.buf.UriUtil;
 import org.apache.tomcat.util.descriptor.XmlErrorHandler;
 import org.apache.tomcat.util.descriptor.web.ContextEjb;
 import org.apache.tomcat.util.descriptor.web.ContextEnvironment;
@@ -102,7 +104,6 @@ import org.apache.tomcat.util.descriptor.web.WebXmlParser;
 import org.apache.tomcat.util.digester.Digester;
 import org.apache.tomcat.util.digester.RuleSet;
 import org.apache.tomcat.util.res.StringManager;
-import org.apache.tomcat.util.scan.Jar;
 import org.apache.tomcat.util.scan.JarFactory;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
@@ -115,7 +116,7 @@ import org.xml.sax.SAXParseException;
  */
 public class ContextConfig implements LifecycleListener {
 
-    private static final Log log = LogFactory.getLog( ContextConfig.class );
+    private static final Log log = LogFactory.getLog(ContextConfig.class);
 
 
     /**
@@ -608,7 +609,7 @@ public class ContextConfig implements LifecycleListener {
         boolean docBaseInAppBase = docBase.startsWith(appBase.getPath() + File.separatorChar);
 
         if (docBase.toLowerCase(Locale.ENGLISH).endsWith(".war") && !file.isDirectory()) {
-            URL war = new URL("jar:" + (new File(docBase)).toURI().toURL() + "!/");
+            URL war = UriUtil.buildJarUrl(new File(docBase));
             if (unpackWARs) {
                 docBase = ExpandWar.expand(host, war, pathName);
                 file = new File(docBase);
@@ -624,7 +625,7 @@ public class ContextConfig implements LifecycleListener {
             File warFile = new File(docBase + ".war");
             URL war = null;
             if (warFile.exists() && docBaseInAppBase) {
-                war = new URL("jar:" + warFile.toURI().toURL() + "!/");
+                war = UriUtil.buildJarUrl(warFile);
             }
             if (docDir.exists()) {
                 if (war != null && unpackWARs) {
@@ -1671,7 +1672,7 @@ public class ContextConfig implements LifecycleListener {
         for (WebXml fragment : fragments) {
             URL url = fragment.getURL();
             try {
-                if ("jar".equals(url.getProtocol())) {
+                if ("jar".equals(url.getProtocol()) || url.toString().endsWith(".jar")) {
                     try (Jar jar = JarFactory.newInstance(url)) {
                         jar.nextEntry();
                         String entryName = jar.getEntryName();
@@ -1692,7 +1693,7 @@ public class ContextConfig implements LifecycleListener {
                     if (resources.isDirectory()) {
                         context.getResources().createWebResourceSet(
                                 WebResourceRoot.ResourceSetType.RESOURCE_JAR,
-                                "/", file.getAbsolutePath(), null, "/");
+                                "/", resources.getAbsolutePath(), null, "/");
                     }
                 }
             } catch (IOException ioe) {
@@ -1954,7 +1955,7 @@ public class ContextConfig implements LifecycleListener {
         if (url == null) {
             // Nothing to do.
             return;
-        } else if ("jar".equals(url.getProtocol())) {
+        } else if ("jar".equals(url.getProtocol()) || url.toString().endsWith(".jar")) {
             processAnnotationsJar(url, fragment, handlesTypesOnly, javaClassCache);
         } else if ("file".equals(url.getProtocol())) {
             try {
@@ -2068,6 +2069,7 @@ public class ContextConfig implements LifecycleListener {
      * super class needs to be checked for a match with {@link HandlesTypes} or
      * for an annotation that matches {@link HandlesTypes}.
      * @param javaClass the class to check
+     * @param javaClassCache a class cache
      */
     protected void checkHandlesTypes(JavaClass javaClass,
             Map<String,JavaClassCacheEntry> javaClassCache) {
@@ -2315,7 +2317,7 @@ public class ContextConfig implements LifecycleListener {
             if ("value".equals(name) || "urlPatterns".equals(name)) {
                 if (urlPatternsSet) {
                     throw new IllegalArgumentException(sm.getString(
-                            "contextConfig.urlPatternValue", className));
+                            "contextConfig.urlPatternValue", "WebServlet", className));
                 }
                 urlPatternsSet = true;
                 urlPatterns = processAnnotationsStringArray(evp.getValue());
@@ -2427,7 +2429,7 @@ public class ContextConfig implements LifecycleListener {
             if ("value".equals(name) || "urlPatterns".equals(name)) {
                 if (urlPatternsSet) {
                     throw new IllegalArgumentException(sm.getString(
-                            "contextConfig.urlPatternValue", className));
+                            "contextConfig.urlPatternValue", "WebFilter", className));
                 }
                 urlPatterns = processAnnotationsStringArray(evp.getValue());
                 urlPatternsSet = urlPatterns.length > 0;

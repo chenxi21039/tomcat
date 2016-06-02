@@ -35,10 +35,8 @@ import java.nio.channels.WritePendingException;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -85,11 +83,6 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
     private AsynchronousChannelGroup threadGroup = null;
 
     private volatile boolean allClosed;
-
-    /**
-     * Cache for SocketProcessor objects
-     */
-    private SynchronizedStack<SocketProcessor> processorCache;
 
     /**
      * Bytebuffer cache, each channel holds a set of buffers (two, except for SSL holds four)
@@ -139,15 +132,6 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
             } catch (IOException e) {
                 return -1;
             }
-        }
-    }
-
-
-    protected void releaseCaches() {
-        this.nioChannels.clear();
-        this.processorCache.clear();
-        if (getHandler() != null) {
-            getHandler().recycle();
         }
     }
 
@@ -279,7 +263,9 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
         super.unbind();
         // Unlike other connectors, the thread pool is tied to the server socket
         shutdownExecutor();
-        releaseCaches();
+        if (getHandler() != null) {
+            getHandler().recycle();
+        }
     }
 
 
@@ -358,7 +344,7 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
             socketWrapper.setReadTimeout(getSoTimeout());
             socketWrapper.setWriteTimeout(getSoTimeout());
             // Continue processing on another thread
-            return processSocket0(socketWrapper, SocketEvent.OPEN_READ, true);
+            return processSocket(socketWrapper, SocketEvent.OPEN_READ, true);
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             log.error("",t);
@@ -376,38 +362,13 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
         return true;
     }
 
+
     @Override
-    public void processSocket(SocketWrapperBase<Nio2Channel> socketWrapper,
-            SocketEvent socketStatus, boolean dispatch) {
-        processSocket0(socketWrapper, socketStatus, dispatch);
+    protected SocketProcessorBase<Nio2Channel> createSocketProcessor(
+            SocketWrapperBase<Nio2Channel> socketWrapper, SocketEvent event) {
+        return new SocketProcessor(socketWrapper, event);
     }
 
-    protected boolean processSocket0(SocketWrapperBase<Nio2Channel> socketWrapper, SocketEvent status, boolean dispatch) {
-        try {
-            SocketProcessor sc = processorCache.pop();
-            if (sc == null) {
-                sc = new SocketProcessor(socketWrapper, status);
-            } else {
-                sc.reset(socketWrapper, status);
-            }
-            Executor executor = getExecutor();
-            if (dispatch && executor != null) {
-                executor.execute(sc);
-            } else {
-                sc.run();
-            }
-        } catch (RejectedExecutionException ree) {
-            log.debug(sm.getString("endpoint.executor.fail", socketWrapper), ree);
-            return false;
-        } catch (Throwable t) {
-            ExceptionUtils.handleThrowable(t);
-            // This means we got an OOM or similar creating a thread, or that
-            // the pool and its queue are full
-            log.error(sm.getString("endpoint.process.fail"), t);
-            return false;
-        }
-        return true;
-    }
 
     public void closeSocket(SocketWrapperBase<Nio2Channel> socket) {
         if (log.isDebugEnabled()) {
@@ -424,12 +385,10 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
             if (log.isDebugEnabled()) log.error("",e);
         }
         try {
-            if (socket.getSocket() != null) {
-                synchronized (socket.getSocket()) {
-                    if (socket.getSocket() != null && socket.getSocket().isOpen()) {
-                        countDownConnection();
-                        socket.getSocket().close(true);
-                    }
+            synchronized (socket.getSocket()) {
+                if (socket.getSocket().isOpen()) {
+                    countDownConnection();
+                    socket.getSocket().close(true);
                 }
             }
         } catch (Throwable e) {
@@ -567,7 +526,6 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
         private final Semaphore writePending = new Semaphore(1);
         private boolean writeInterest = false; // Guarded by writeCompletionHandler
         private boolean writeNotify = false;
-        private volatile IOException error = null;
 
         private CompletionHandler<Integer, SocketWrapperBase<Nio2Channel>> awaitBytesHandler
                 = new CompletionHandler<Integer, SocketWrapperBase<Nio2Channel>>() {
@@ -837,10 +795,6 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
         public void setSendfileData(SendfileData sf) { this.sendfileData = sf; }
         public SendfileData getSendfileData() { return this.sendfileData; }
 
-        public IOException getError() { return error; }
-        public void setError(IOException error) { this.error = error; }
-
-
         @Override
         public boolean isReadyForRead() throws IOException {
             synchronized (readCompletionHandler) {
@@ -868,9 +822,7 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
 
         @Override
         public int read(boolean block, byte[] b, int off, int len) throws IOException {
-            if (getError() != null) {
-                throw getError();
-            }
+            checkError();
 
             if (log.isDebugEnabled()) {
                 log.debug("Socket: [" + this + "], block: [" + block + "], length: [" + len + "]");
@@ -949,10 +901,7 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
 
         @Override
         public void close() throws IOException {
-            Nio2Channel socket = getSocket();
-            if (socket != null) {
-                socket.close();
-            }
+            getSocket().close();
         }
 
         @Override
@@ -1230,7 +1179,7 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
          *              blocking case
          */
         @Override
-        protected void doWriteInternal(boolean block) throws IOException {
+        protected void doWrite(boolean block) throws IOException {
             Future<Integer> integer = null;
             try {
                 socketBufferHandler.configureWriteBufferForRead();
@@ -1257,9 +1206,7 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
 
         @Override
         protected void flushBlocking() throws IOException {
-            if (getError() != null) {
-                throw getError();
-            }
+            checkError();
 
             // Before doing a blocking flush, make sure that any pending non
             // blocking write has completed.
@@ -1278,14 +1225,11 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
 
         @Override
         protected boolean flushNonBlocking() throws IOException {
-            if (getError() != null) {
-                throw getError();
-            }
-
             return flushNonBlocking(false);
         }
 
-        private boolean flushNonBlocking(boolean hasPermit) {
+        private boolean flushNonBlocking(boolean hasPermit) throws IOException {
+            checkError();
             synchronized (writeCompletionHandler) {
                 if (hasPermit || writePending.tryAcquire()) {
                     socketBufferHandler.configureWriteBufferForRead();
@@ -1407,9 +1351,6 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
 
 
         public void awaitBytes() {
-            if (getSocket() == null) {
-                return;
-            }
             // NO-OP is there is already a read in progress.
             if (readPending.tryAcquire()) {
                 getSocket().getBufHandler().configureReadBufferForWrite();
@@ -1636,111 +1577,99 @@ public class Nio2Endpoint extends AbstractJsseEndpoint<Nio2Channel> {
      * This class is the equivalent of the Worker, but will simply use in an
      * external Executor thread pool.
      */
-    protected class SocketProcessor implements Runnable {
+    protected class SocketProcessor extends SocketProcessorBase<Nio2Channel> {
 
-        private SocketWrapperBase<Nio2Channel> socket = null;
-        private SocketEvent status = null;
-
-        public SocketProcessor(SocketWrapperBase<Nio2Channel> socket, SocketEvent status) {
-            reset(socket,status);
-        }
-
-        public void reset(SocketWrapperBase<Nio2Channel> socket, SocketEvent status) {
-            this.socket = socket;
-            this.status = status;
+        public SocketProcessor(SocketWrapperBase<Nio2Channel> socketWrapper, SocketEvent event) {
+            super(socketWrapper, event);
         }
 
         @Override
-        public void run() {
-            synchronized (socket) {
-                if (SocketEvent.OPEN_WRITE != status) {
-                    // Anything other than OPEN_WRITE is a genuine read or an
-                    // error condition so for all of those release the semaphore
-                    ((Nio2SocketWrapper) socket).releaseReadPending();
-                }
-                boolean launch = false;
-                try {
-                    int handshake = -1;
+        protected void doRun() {
+            if (SocketEvent.OPEN_WRITE != event) {
+                // Anything other than OPEN_WRITE is a genuine read or an
+                // error condition so for all of those release the semaphore
+                ((Nio2SocketWrapper) socketWrapper).releaseReadPending();
+            }
+            boolean launch = false;
+            try {
+                int handshake = -1;
 
-                    try {
-                        if (socket.getSocket() != null) {
-                            // For STOP there is no point trying to handshake as the
-                            // Poller has been stopped.
-                            if (!socket.getSocket().isHandshakeComplete() && status == SocketEvent.ERROR) {
-                                handshake = -1;
-                            } else if (socket.getSocket().isHandshakeComplete() ||
-                                    status == SocketEvent.STOP ||
-                                    status == SocketEvent.ERROR) {
-                                handshake = 0;
-                            } else {
-                                handshake = socket.getSocket().handshake();
-                                // The handshake process reads/writes from/to the
-                                // socket. status may therefore be OPEN_WRITE once
-                                // the handshake completes. However, the handshake
-                                // happens when the socket is opened so the status
-                                // must always be OPEN_READ after it completes. It
-                                // is OK to always set this as it is only used if
-                                // the handshake completes.
-                                status = SocketEvent.OPEN_READ;
-                            }
-                        }
-                    } catch (IOException x) {
+                try {
+                    // For STOP there is no point trying to handshake as the
+                    // Poller has been stopped.
+                    if (!socketWrapper.getSocket().isHandshakeComplete() && event == SocketEvent.ERROR) {
                         handshake = -1;
-                        if (log.isDebugEnabled()) {
-                            log.debug(sm.getString("endpoint.err.handshake"), x);
-                        }
+                    } else if (socketWrapper.getSocket().isHandshakeComplete() ||
+                            event == SocketEvent.STOP ||
+                            event == SocketEvent.ERROR) {
+                        handshake = 0;
+                    } else {
+                        handshake = socketWrapper.getSocket().handshake();
+                        // The handshake process reads/writes from/to the
+                        // socket. status may therefore be OPEN_WRITE once
+                        // the handshake completes. However, the handshake
+                        // happens when the socket is opened so the status
+                        // must always be OPEN_READ after it completes. It
+                        // is OK to always set this as it is only used if
+                        // the handshake completes.
+                        event = SocketEvent.OPEN_READ;
                     }
-                    if (handshake == 0) {
-                        SocketState state = SocketState.OPEN;
-                        // Process the request from this socket
-                        if (status == null) {
-                            state = getHandler().process(socket, SocketEvent.OPEN_READ);
-                        } else {
-                            state = getHandler().process(socket, status);
-                        }
-                        if (state == SocketState.CLOSED) {
-                            // Close socket and pool
-                            closeSocket(socket);
-                            if (running && !paused) {
-                                if (!nioChannels.push(socket.getSocket())) {
-                                    socket.getSocket().free();
-                                }
-                            }
-                        } else if (state == SocketState.UPGRADING) {
-                            launch = true;
-                        }
-                    } else if (handshake == -1 ) {
-                        closeSocket(socket);
+                } catch (IOException x) {
+                    handshake = -1;
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("endpoint.err.handshake"), x);
+                    }
+                }
+                if (handshake == 0) {
+                    SocketState state = SocketState.OPEN;
+                    // Process the request from this socket
+                    if (event == null) {
+                        state = getHandler().process(socketWrapper, SocketEvent.OPEN_READ);
+                    } else {
+                        state = getHandler().process(socketWrapper, event);
+                    }
+                    if (state == SocketState.CLOSED) {
+                        // Close socket and pool
+                        closeSocket(socketWrapper);
                         if (running && !paused) {
-                            if (!nioChannels.push(socket.getSocket())) {
-                                socket.getSocket().free();
+                            if (!nioChannels.push(socketWrapper.getSocket())) {
+                                socketWrapper.getSocket().free();
                             }
                         }
+                    } else if (state == SocketState.UPGRADING) {
+                        launch = true;
                     }
-                } catch (VirtualMachineError vme) {
-                    ExceptionUtils.handleThrowable(vme);
-                } catch (Throwable t) {
-                    log.error(sm.getString("endpoint.processing.fail"), t);
-                    if (socket != null) {
-                        closeSocket(socket);
-                    }
-                } finally {
-                    if (launch) {
-                        try {
-                            getExecutor().execute(new SocketProcessor(socket, SocketEvent.OPEN_READ));
-                        } catch (NullPointerException npe) {
-                            if (running) {
-                                log.error(sm.getString("endpoint.launch.fail"),
-                                        npe);
-                            }
-                        }
-                    }
-                    socket = null;
-                    status = null;
-                    //return to cache
+                } else if (handshake == -1 ) {
+                    closeSocket(socketWrapper);
                     if (running && !paused) {
-                        processorCache.push(this);
+                        if (!nioChannels.push(socketWrapper.getSocket())) {
+                            socketWrapper.getSocket().free();
+                        }
                     }
+                }
+            } catch (VirtualMachineError vme) {
+                ExceptionUtils.handleThrowable(vme);
+            } catch (Throwable t) {
+                log.error(sm.getString("endpoint.processing.fail"), t);
+                if (socketWrapper != null) {
+                    closeSocket(socketWrapper);
+                }
+            } finally {
+                if (launch) {
+                    try {
+                        getExecutor().execute(new SocketProcessor(socketWrapper, SocketEvent.OPEN_READ));
+                    } catch (NullPointerException npe) {
+                        if (running) {
+                            log.error(sm.getString("endpoint.launch.fail"),
+                                    npe);
+                        }
+                    }
+                }
+                socketWrapper = null;
+                event = null;
+                //return to cache
+                if (running && !paused) {
+                    processorCache.push(this);
                 }
             }
         }

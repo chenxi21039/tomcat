@@ -27,7 +27,7 @@ version.major=9
 version.minor=0
 version.build=0
 version.patch=0
-version.suffix=.M4-dev
+version.suffix=.M7-dev
 
 # ----- Build control flags -----
 # Note enabling validation uses Checkstyle which is LGPL licensed
@@ -74,9 +74,7 @@ trydownload.httpusecaches=true
 # Please note this path must be absolute, not relative,
 # as it is referenced with different working directory
 # contexts by the various build scripts.
-base.path=/usr/share/java
-#base.path=C:/path/to/the/repository
-#base.path=/usr/local
+base.path=${user.home}/tomcat-build-libs
 
 compile.debug=true
 
@@ -145,10 +143,10 @@ wsdl4j-lib.home=${base.path}/wsdl4j-${wsdl4j-lib.version}
 wsdl4j-lib.loc=${base-maven.loc}/wsdl4j/wsdl4j/${wsdl4j-lib.version}/wsdl4j-${wsdl4j-lib.version}.jar
 wsdl4j-lib.jar=${wsdl4j-lib.home}/wsdl4j-${wsdl4j-lib.version}.jar
 
-# ----- Eclipse JDT, version 4.5 or later -----#
+# ----- Eclipse JDT, version 4.5.1 or later -----#
 # See https://wiki.apache.org/tomcat/JDTCoreBatchCompiler before updating
-jdt.version=4.5
-jdt.release=R-4.5-201506032000
+jdt.version=4.5.1
+jdt.release=R-4.5.1-201509040015
 jdt.home=${base.path}/ecj-${jdt.version}
 jdt.jar=${jdt.home}/ecj-${jdt.version}.jar
 # The download will be moved to the archive area eventually. We are taking care of that in advance.
@@ -156,7 +154,7 @@ jdt.loc.1=http://archive.eclipse.org/eclipse/downloads/drops4/${jdt.release}/ecj
 jdt.loc.2=http://download.eclipse.org/eclipse/downloads/drops4/${jdt.release}/ecj-${jdt.version}.jar
 
 # ----- Tomcat native library -----
-tomcat-native.version=1.2.4
+tomcat-native.version=1.2.7
 tomcat-native.home=${base.path}/tomcat-native-${tomcat-native.version}
 tomcat-native.tar.gz=${tomcat-native.home}/tomcat-native.tar.gz
 tomcat-native.loc.1=${base-tomcat.loc.1}/tomcat-connectors/native/${tomcat-native.version}/source/tomcat-native-${tomcat-native.version}-src.tar.gz
@@ -165,7 +163,7 @@ tomcat-native.win.1=${base-tomcat.loc.1}/tomcat-connectors/native/${tomcat-nativ
 tomcat-native.win.2=${base-tomcat.loc.2}/tomcat-connectors/native/${tomcat-native.version}/binaries/tomcat-native-${tomcat-native.version}-win32-bin.zip
 
 # ----- NSIS, version 2.0 or later -----
-nsis.version=2.50
+nsis.version=2.51
 nsis.home=${base.path}/nsis-${nsis.version}
 nsis.exe=${nsis.home}/makensis.exe
 nsis.installoptions.dll=${nsis.home}/Plugins/InstallOptions.dll
@@ -218,8 +216,8 @@ objenesis.home=${base.path}/objenesis-${objenesis.version}
 objenesis.loc=https://objenesis.googlecode.com/files/objenesis-${objenesis.version}-bin.zip
 objenesis.jar=${objenesis.home}/objenesis-${objenesis.version}.jar
 
-# ----- Checkstyle, version 6.0 or later -----
-checkstyle.version=6.14.1
+# ----- Checkstyle, version 6.16 or later -----
+checkstyle.version=6.17
 checkstyle.home=${base.path}/checkstyle-${checkstyle.version}
 checkstyle.loc=${base-sf.loc}/checkstyle/checkstyle/${checkstyle.version}/checkstyle-${checkstyle.version}-all.jar
 checkstyle.jar=${checkstyle.home}/checkstyle-${checkstyle.version}-all.jar
