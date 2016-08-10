@@ -90,6 +90,11 @@ public class RewriteValve extends ValveBase {
     protected Map<String, RewriteMap> maps = new Hashtable<>();
 
 
+    public RewriteValve() {
+        super(true);
+    }
+
+
     public boolean getEnabled() {
         return enabled;
     }
@@ -433,7 +438,7 @@ public class RewriteValve extends ValveBase {
                     if (context) {
                         chunk.append(contextPath);
                     }
-                    chunk.append(URLEncoder.DEFAULT.encode(urlString));
+                    chunk.append(URLEncoder.DEFAULT.encode(urlString, "UTF-8"));
                     request.getCoyoteRequest().requestURI().toChars();
                     // Decoded and normalized URI
                     request.getCoyoteRequest().decodedURI().setString(null);

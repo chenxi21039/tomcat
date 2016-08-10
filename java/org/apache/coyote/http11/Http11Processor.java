@@ -733,10 +733,6 @@ public class Http11Processor extends AbstractProcessor {
             inputBuffer.setSwallowInput(false);
             break;
         }
-        case END_REQUEST: {
-            endRequest();
-            break;
-        }
 
         // Request attribute support
         case REQ_HOST_ADDR_ATTRIBUTE: {
@@ -1672,13 +1668,6 @@ public class Http11Processor extends AbstractProcessor {
         }
 
         if (colonPos < 0) {
-            if (!endpoint.isSSLEnabled()) {
-                // 80 - Default HTTP port
-                request.setServerPort(80);
-            } else {
-                // 443 - Default HTTPS port
-                request.setServerPort(443);
-            }
             request.serverName().setChars(hostNameC, 0, valueL);
         } else {
             request.serverName().setChars(hostNameC, 0, colonPos);

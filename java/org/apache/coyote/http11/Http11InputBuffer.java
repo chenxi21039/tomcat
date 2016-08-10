@@ -412,7 +412,7 @@ public class Http11InputBuffer implements InputBuffer {
                 }
                 if (!keptAlive && pos == 0 && lastValid >= CLIENT_PREFACE_START.length - 1) {
                     boolean prefaceMatch = true;
-                    for (int i = 0; i < CLIENT_PREFACE_START.length; i++) {
+                    for (int i = 0; i < CLIENT_PREFACE_START.length && prefaceMatch; i++) {
                         if (CLIENT_PREFACE_START[i] != buf[i]) {
                             prefaceMatch = false;
                         }

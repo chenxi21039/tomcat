@@ -43,13 +43,15 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
     private static final Log log = LogFactory.getLog(StreamProcessor.class);
     private static final StringManager sm = StringManager.getManager(StreamProcessor.class);
 
+    private final Http2UpgradeHandler handler;
     private final Stream stream;
 
     private volatile SSLSupport sslSupport;
 
 
-    public StreamProcessor(Stream stream, Adapter adapter, SocketWrapperBase<?> socketWrapper) {
+    public StreamProcessor(Http2UpgradeHandler handler, Stream stream, Adapter adapter, SocketWrapperBase<?> socketWrapper) {
         super(stream.getCoyoteRequest(), stream.getCoyoteResponse());
+        this.handler = handler;
         this.stream = stream;
         setAdapter(adapter);
         setSocketWrapper(socketWrapper);
@@ -57,36 +59,43 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
 
 
     @Override
-    public synchronized void run() {
-        // HTTP/2 equivalent of AbstractConnectionHandler#process() without the
-        // socket <-> processor mapping
-        ContainerThreadMarker.set();
-        SocketState state = SocketState.CLOSED;
+    public void run() {
         try {
-            state = process(socketWrapper, SocketEvent.OPEN_READ);
+            // FIXME: the regular processor syncs on socketWrapper, but here this deadlocks
+            synchronized (this) {
+                // HTTP/2 equivalent of AbstractConnectionHandler#process() without the
+                // socket <-> processor mapping
+                ContainerThreadMarker.set();
+                SocketState state = SocketState.CLOSED;
+                try {
+                    state = process(socketWrapper, SocketEvent.OPEN_READ);
 
-            if (state == SocketState.CLOSED) {
-                if (!getErrorState().isConnectionIoAllowed()) {
+                    if (state == SocketState.CLOSED) {
+                        if (!getErrorState().isConnectionIoAllowed()) {
+                            ConnectionException ce = new ConnectionException(sm.getString(
+                                    "streamProcessor.error.connection", stream.getConnectionId(),
+                                    stream.getIdentifier()), Http2Error.INTERNAL_ERROR);
+                            stream.close(ce);
+                        } else if (!getErrorState().isIoAllowed()) {
+                            StreamException se = new StreamException(sm.getString(
+                                    "streamProcessor.error.stream", stream.getConnectionId(),
+                                    stream.getIdentifier()), Http2Error.INTERNAL_ERROR,
+                                    stream.getIdentifier().intValue());
+                            stream.close(se);
+                        }
+                    }
+                } catch (Exception e) {
                     ConnectionException ce = new ConnectionException(sm.getString(
                             "streamProcessor.error.connection", stream.getConnectionId(),
                             stream.getIdentifier()), Http2Error.INTERNAL_ERROR);
+                    ce.initCause(e);
                     stream.close(ce);
-                } else if (!getErrorState().isIoAllowed()) {
-                    StreamException se = new StreamException(sm.getString(
-                            "streamProcessor.error.stream", stream.getConnectionId(),
-                            stream.getIdentifier()), Http2Error.INTERNAL_ERROR,
-                            stream.getIdentifier().intValue());
-                    stream.close(se);
+                } finally {
+                    ContainerThreadMarker.clear();
                 }
             }
-        } catch (Exception e) {
-            ConnectionException ce = new ConnectionException(sm.getString(
-                    "streamProcessor.error.connection", stream.getConnectionId(),
-                    stream.getIdentifier()), Http2Error.INTERNAL_ERROR);
-            ce.initCause(e);
-            stream.close(ce);
         } finally {
-            ContainerThreadMarker.clear();
+            handler.executeQueuedStream();
         }
     }
 
@@ -167,12 +176,6 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
             // NO-OP
             // HTTP/2 has to swallow any input received to ensure that the flow
             // control windows are correctly tracked.
-            break;
-        }
-        case END_REQUEST: {
-            // NO-OP
-            // This action is geared towards handling HTTP/1.1 expectations and
-            // keep-alive. Does not apply to HTTP/2 streams.
             break;
         }
 

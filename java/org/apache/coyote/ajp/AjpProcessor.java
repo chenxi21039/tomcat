@@ -432,10 +432,6 @@ public class AjpProcessor extends AbstractProcessor {
             setErrorState(ErrorState.CLOSE_CLEAN, null);
             break;
         }
-        case END_REQUEST: {
-            // NO-OP for AJP
-            break;
-        }
 
         // Request attribute support
         case REQ_HOST_ADDR_ATTRIBUTE: {
@@ -1307,13 +1303,6 @@ public class AjpProcessor extends AbstractProcessor {
         }
 
         if (colonPos < 0) {
-            if (request.scheme().equalsIgnoreCase("https")) {
-                // 443 - Default HTTPS port
-                request.setServerPort(443);
-            } else {
-                // 80 - Default HTTTP port
-                request.setServerPort(80);
-            }
             request.serverName().setChars(hostNameC, 0, valueL);
         } else {
 

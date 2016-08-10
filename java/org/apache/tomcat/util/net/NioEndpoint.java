@@ -1141,13 +1141,9 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel> {
             int remaining = readBuffer.remaining();
 
             // Is there enough data in the read buffer to satisfy this request?
-            if (remaining >= len) {
-                readBuffer.get(b, off, len);
-                return len;
-            }
-
             // Copy what data there is in the read buffer to the byte array
             if (remaining > 0) {
+                remaining = Math.min(remaining, len);
                 readBuffer.get(b, off, remaining);
                 return remaining;
                 /*
@@ -1161,28 +1157,28 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel> {
 
             // Fill the read buffer as best we can.
             int nRead = fillReadBuffer(block);
-            lastRead = System.currentTimeMillis();
+            updateLastRead();
 
             // Full as much of the remaining byte array as possible with the
             // data that was just read
             if (nRead > 0) {
                 socketBufferHandler.configureReadBufferForRead();
-                if (nRead > len) {
-                    readBuffer.get(b, off, len);
-                    return len;
-                } else {
-                    readBuffer.get(b, off, nRead);
-                    return nRead;
-                }
-            } else {
-                return nRead;
+                nRead = Math.min(nRead, len);
+                readBuffer.get(b, off, nRead);
             }
+            return nRead;
         }
 
 
         @Override
         public void close() throws IOException {
             getSocket().close();
+        }
+
+
+        @Override
+        public boolean isClosed() {
+            return !getSocket().isOpen();
         }
 
 
@@ -1240,7 +1236,7 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel> {
                         if (getSocket().flush(true, selector, writeTimeout)) break;
                     } while (true);
                 }
-                lastWrite = System.currentTimeMillis();
+                updateLastWrite();
             } finally {
                 if (selector != null) {
                     pool.put(selector);

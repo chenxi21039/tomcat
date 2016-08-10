@@ -75,6 +75,7 @@ import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.IntrospectionUtils;
 import org.apache.tomcat.util.compat.JreCompat;
 import org.apache.tomcat.util.res.StringManager;
+import org.apache.tomcat.util.security.PermissionCheck;
 
 /**
  * Specialized web application class loader.
@@ -120,7 +121,7 @@ import org.apache.tomcat.util.res.StringManager;
  * @author Craig R. McClanahan
  */
 public abstract class WebappClassLoaderBase extends URLClassLoader
-        implements Lifecycle, InstrumentableClassLoader, WebappProperties {
+        implements Lifecycle, InstrumentableClassLoader, WebappProperties, PermissionCheck {
 
     private static final Log log = LogFactory.getLog(WebappClassLoaderBase.class);
 
@@ -315,12 +316,6 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
      * the system class loader and the last non-null result used.
      */
     private ClassLoader javaseClassLoader;
-
-
-    /**
-     * All permission.
-     */
-    protected final Permission allPermission = new java.security.AllPermission();
 
 
     /**
@@ -1334,6 +1329,24 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
     }
 
 
+    @Override
+    public boolean check(Permission permission) {
+        if (!Globals.IS_SECURITY_ENABLED) {
+            return true;
+        }
+        Policy currentPolicy = Policy.getPolicy();
+        if (currentPolicy != null) {
+            URL contextRootUrl = resources.getResource("/").getCodeBase();
+            CodeSource cs = new CodeSource(contextRootUrl, (Certificate[]) null);
+            PermissionCollection pc = currentPolicy.getPermissions(cs);
+            if (pc.implies(permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     /**
      * {@inheritDoc}
      * <p>
@@ -2125,11 +2138,10 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
 
         checkStateForResourceLoading(name);
 
-        String path = binaryNameToPath(name, true);
-
-        if (name == null || path == null) {
+        if (name == null) {
             return null;
         }
+        String path = binaryNameToPath(name, true);
 
         ResourceEntry entry = resourceEntries.get(path);
         WebResource resource = null;
@@ -2435,19 +2447,6 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
             }
         }
         return false;
-    }
-
-
-    /**
-     * Filter classes.
-     *
-     * @param name class name
-     * @return <code>true</code> if the class should be filtered
-     * @deprecated Use {@link #filter(String, boolean)}
-     */
-    @Deprecated
-    protected boolean filter(String name) {
-        return filter(name, true) || filter(name, false);
     }
 
 

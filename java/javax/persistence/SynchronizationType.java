@@ -14,22 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package javax.persistence;
 
-
-package org.apache.naming;
-
-
-/**
- * Static constants for this package.
- */
-
-public final class Constants {
-
-    public static final String Package = "org.apache.naming";
-
-    /**
-     * Has security been turned on?
-     */
-    public static final boolean IS_SECURITY_ENABLED =
-        (System.getSecurityManager() != null);
+public enum SynchronizationType {
+    SYNCHRONIZED,
+    UNSYNCHRONIZED
 }

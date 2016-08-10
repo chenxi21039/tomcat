@@ -16,6 +16,9 @@
  */
 package org.apache.tomcat.util.net;
 
+import java.io.IOException;
+import java.io.Serializable;
+import java.security.KeyStore;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -24,8 +27,9 @@ import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.net.openssl.ciphers.Authentication;
 import org.apache.tomcat.util.res.StringManager;
 
+public class SSLHostConfigCertificate implements Serializable {
 
-public class SSLHostConfigCertificate {
+    private static final long serialVersionUID = 1L;
 
     private static final Log log = LogFactory.getLog(SSLHostConfigCertificate.class);
     private static final StringManager sm = StringManager.getManager(SSLHostConfigCertificate.class);
@@ -40,7 +44,7 @@ public class SSLHostConfigCertificate {
     // OpenSSL can handle multiple certs in a single config so the reference to
     // the context is at the virtual host level. JSSE can't so the reference is
     // held here on the certificate.
-    private SSLContext sslContext;
+    private transient SSLContext sslContext;
 
     // Common
     private final SSLHostConfig sslHostConfig;
@@ -48,11 +52,12 @@ public class SSLHostConfigCertificate {
     private String certificateKeyPassword = null;
 
     // JSSE
-    private String certificateKeyAlias = "tomcat";
+    private String certificateKeyAlias;
     private String certificateKeystorePassword = "changeit";
     private String certificateKeystoreFile = System.getProperty("user.home")+"/.keystore";
     private String certificateKeystoreProvider = DEFAULT_KEYSTORE_PROVIDER;
     private String certificateKeystoreType = DEFAULT_KEYSTORE_TYPE;
+    private transient KeyStore certificateKeystore = null;
 
     // OpenSSL
     private String certificateChainFile;
@@ -167,6 +172,24 @@ public class SSLHostConfigCertificate {
 
     public String getCertificateKeystoreType() {
         return certificateKeystoreType;
+    }
+
+
+    public void setCertificateKeystore(KeyStore certificateKeystore) {
+        this.certificateKeystore = certificateKeystore;
+    }
+
+
+    public KeyStore getCertificateKeystore() throws IOException {
+        KeyStore result = certificateKeystore;
+
+        if (result == null && storeType == StoreType.KEYSTORE) {
+            result = SSLUtilBase.getStore(getCertificateKeystoreType(),
+                    getCertificateKeystoreProvider(), getCertificateKeystoreFile(),
+                    getCertificateKeystorePassword());
+        }
+
+        return result;
     }
 
 

@@ -237,12 +237,6 @@ public class Stream extends AbstractStream implements HeaderEmitter {
                 coyoteRequest.setServerPort(Integer.parseInt(value.substring(i + 1)));
             } else {
                 coyoteRequest.serverName().setString(value);
-                boolean secure = Boolean.parseBoolean(handler.getProperty("secure"));
-                if (secure) {
-                    coyoteRequest.setServerPort(443);
-                } else {
-                    coyoteRequest.setServerPort(80);
-                }
             }
             break;
         }
@@ -428,7 +422,7 @@ public class Stream extends AbstractStream implements HeaderEmitter {
     }
 
 
-    private static void push(Http2UpgradeHandler handler, Request request, Stream stream)
+    private static void push(final Http2UpgradeHandler handler, final Request request, final Stream stream)
             throws IOException {
         if (org.apache.coyote.Constants.IS_SECURITY_ENABLED) {
             try {
@@ -473,6 +467,9 @@ public class Stream extends AbstractStream implements HeaderEmitter {
                 throw new IllegalStateException(
                         sm.getString("stream.closed", getConnectionId(), getIdentifier()));
             }
+            if (!coyoteResponse.isCommitted()) {
+                coyoteResponse.sendHeaders();
+            }
             int len = chunk.getLength();
             int offset = 0;
             while (len > 0) {
@@ -502,9 +499,6 @@ public class Stream extends AbstractStream implements HeaderEmitter {
                 log.debug(sm.getString("stream.outputBuffer.flush.debug", getConnectionId(),
                         getIdentifier(), Integer.toString(buffer.position()),
                         Boolean.toString(writeInProgress), Boolean.toString(closed)));
-            }
-            if (!coyoteResponse.isCommitted()) {
-                coyoteResponse.sendHeaders();
             }
             if (buffer.position() == 0) {
                 if (closed && !endOfStreamSent) {

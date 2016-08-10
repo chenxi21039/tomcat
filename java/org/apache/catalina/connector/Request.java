@@ -83,6 +83,7 @@ import org.apache.catalina.core.ApplicationSessionCookieConfig;
 import org.apache.catalina.core.AsyncContextImpl;
 import org.apache.catalina.mapper.MappingData;
 import org.apache.catalina.util.ParameterMap;
+import org.apache.catalina.util.URLEncoder;
 import org.apache.coyote.ActionCode;
 import org.apache.coyote.UpgradeToken;
 import org.apache.coyote.http11.upgrade.InternalHttpUpgradeHandler;
@@ -775,12 +776,8 @@ public class Request implements HttpServletRequest {
      * @exception IOException if an input/output error occurs
      */
     public void finishRequest() throws IOException {
-        // Optionally disable swallowing of additional request data.
-        Context context = getContext();
-        if (context != null &&
-                response.getStatus() == HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE &&
-                !context.getSwallowAbortedUploads()) {
-            coyoteRequest.action(ActionCode.DISABLE_SWALLOW_INPUT, null);
+        if (response.getStatus() == HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE) {
+            checkSwallowInput();
         }
     }
 
@@ -1376,14 +1373,22 @@ public class Request implements HttpServletRequest {
 
         int pos = requestPath.lastIndexOf('/');
         String relative = null;
-        if (pos >= 0) {
-            relative = requestPath.substring(0, pos + 1) + path;
+        if (context.getDispatchersUseEncodedPaths()) {
+            if (pos >= 0) {
+                relative = URLEncoder.DEFAULT.encode(
+                        requestPath.substring(0, pos + 1), "UTF-8") + path;
+            } else {
+                relative = URLEncoder.DEFAULT.encode(requestPath, "UTF-8") + path;
+            }
         } else {
-            relative = requestPath + path;
+            if (pos >= 0) {
+                relative = requestPath.substring(0, pos + 1) + path;
+            } else {
+                relative = requestPath + path;
+            }
         }
 
         return context.getServletContext().getRequestDispatcher(relative);
-
     }
 
 
@@ -2629,17 +2634,10 @@ public class Request implements HttpServletRequest {
         return parametersParsed;
     }
 
-    /**
-     * @return <code>true</code> if bytes are available.
-     */
-    public boolean getAvailable() {
-        return (inputBuffer.available() > 0);
-    }
-
 
     /**
-     * @return <code>true</code> if an attempt has been made to read the request body and all
-     * of the request body has been read
+     * @return <code>true</code> if an attempt has been made to read the request
+     *         body and all of the request body has been read.
      */
     public boolean isFinished() {
         return coyoteRequest.isFinished();
@@ -2647,7 +2645,9 @@ public class Request implements HttpServletRequest {
 
 
     /**
-     * Disable swallowing of remaining input if configured
+     * Check the configuration for aborted uploads and if configured to do so,
+     * disable the swallowing of any remaining input and close the connection
+     * once the response has been written.
      */
     protected void checkSwallowInput() {
         Context context = getContext();

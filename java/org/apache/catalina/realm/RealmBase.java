@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import javax.servlet.annotation.ServletSecurity.TransportGuarantee;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.catalina.Container;
@@ -106,8 +107,7 @@ public abstract class RealmBase extends LifecycleMBeanBase implements Realm {
     /**
      * The string manager for this package.
      */
-    protected static final StringManager sm =
-        StringManager.getManager(Constants.Package);
+    protected static final StringManager sm = StringManager.getManager(RealmBase.class);
 
 
     /**
@@ -145,7 +145,33 @@ public abstract class RealmBase extends LifecycleMBeanBase implements Realm {
     protected boolean stripRealmForGss = true;
 
 
+    private int transportGuaranteeRedirectStatus = HttpServletResponse.SC_FOUND;
+
+
     // ------------------------------------------------------------- Properties
+
+
+    /**
+     * @return The HTTP status code used when the container needs to issue an
+     *         HTTP redirect to meet the requirements of a configured transport
+     *         guarantee.
+     */
+    public int getTransportGuaranteeRedirectStatus() {
+        return transportGuaranteeRedirectStatus;
+    }
+
+
+    /**
+     * Set the HTTP status code used when the container needs to issue an HTTP
+     * redirect to meet the requirements of a configured transport guarantee.
+     *
+     * @param transportGuaranteeRedirectStatus The status to use. This value is
+     *                                         not validated
+     */
+    public void setTransportGuaranteeRedirectStatus(int transportGuaranteeRedirectStatus) {
+        this.transportGuaranteeRedirectStatus = transportGuaranteeRedirectStatus;
+    }
+
 
     @Override
     public CredentialHandler getCredentialHandler() {
@@ -937,7 +963,7 @@ public abstract class RealmBase extends LifecycleMBeanBase implements Realm {
                     log.debug("  No applicable user data constraint defined");
                 return true;
             }
-            if (userConstraint.equals(Constants.NONE_TRANSPORT)) {
+            if (userConstraint.equals(TransportGuarantee.NONE.name())) {
                 if (log.isDebugEnabled())
                     log.debug("  User data constraint has no restrictions");
                 return true;
@@ -991,7 +1017,7 @@ public abstract class RealmBase extends LifecycleMBeanBase implements Realm {
         }
         if (log.isDebugEnabled())
             log.debug("  Redirecting to " + file.toString());
-        response.sendRedirect(file.toString());
+        response.sendRedirect(file.toString(), transportGuaranteeRedirectStatus);
         return false;
 
     }

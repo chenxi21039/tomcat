@@ -29,6 +29,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.RandomAccessFile;
 import java.io.Reader;
+import java.io.Serializable;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.security.AccessController;
@@ -144,11 +145,6 @@ public class DefaultServlet extends HttpServlet {
      * MIME multipart separation string
      */
     protected static final String mimeSeparation = "CATALINA_MIME_BOUNDARY";
-
-    /**
-     * JNDI resources name.
-     */
-    protected static final String RESOURCES_JNDI_NAME = "java:/comp/Resources";
 
     /**
      * Size of file transfer buffer in bytes.
@@ -696,7 +692,7 @@ public class DefaultServlet extends HttpServlet {
      * @return the rewritten path
      */
     protected String rewriteUrl(String path) {
-        return URLEncoder.DEFAULT.encode( path );
+        return URLEncoder.DEFAULT.encode(path, "UTF-8");
     }
 
 
@@ -1359,20 +1355,18 @@ public class DefaultServlet extends HttpServlet {
     }
 
 
-
     /**
      * Decide which way to render. HTML or XML.
+     *
      * @param contextPath The path
-     * @param resource The resource
+     * @param resource    The resource
+     * @param encoding    The encoding to use to process the readme (if any)
+     *
      * @return the input stream with the rendered output
+     *
      * @throws IOException an IO error occurred
      * @throws ServletException rendering error
      */
-    protected InputStream render(String contextPath, WebResource resource)
-        throws IOException, ServletException {
-        return render(contextPath, resource, null);
-    }
-
     protected InputStream render(String contextPath, WebResource resource, String encoding)
         throws IOException, ServletException {
 
@@ -1382,26 +1376,23 @@ public class DefaultServlet extends HttpServlet {
             return renderHtml(contextPath, resource, encoding);
         }
         return renderXml(contextPath, resource, xsltSource, encoding);
-
     }
 
+
     /**
-     * Return an InputStream to an HTML representation of the contents
-     * of this directory.
+     * Return an InputStream to an XML representation of the contents this
+     * directory.
      *
-     * @param contextPath Context path to which our internal paths are
-     *  relative
-     * @param resource The associated resource
-     * @param xsltSource The XSL stylesheet
+     * @param contextPath Context path to which our internal paths are relative
+     * @param resource    The associated resource
+     * @param xsltSource  The XSL stylesheet
+     * @param encoding    The encoding to use to process the readme (if any)
+     *
      * @return the XML data
+     *
      * @throws IOException an IO error occurred
      * @throws ServletException rendering error
      */
-    protected InputStream renderXml(String contextPath, WebResource resource, Source xsltSource)
-        throws IOException, ServletException {
-        return renderXml(contextPath, resource, xsltSource, null);
-    }
-
     protected InputStream renderXml(String contextPath, WebResource resource, Source xsltSource,
             String encoding)
         throws IOException, ServletException {
@@ -1521,20 +1512,17 @@ public class DefaultServlet extends HttpServlet {
     }
 
     /**
-     * Return an InputStream to an HTML representation of the contents
-     * of this directory.
+     * Return an InputStream to an HTML representation of the contents of this
+     * directory.
      *
-     * @param contextPath Context path to which our internal paths are
-     *  relative
-     * @param resource The resource
+     * @param contextPath Context path to which our internal paths are relative
+     * @param resource    The associated resource
+     * @param encoding    The encoding to use to process the readme (if any)
+     *
      * @return the HTML data
+     *
      * @throws IOException an IO error occurred
      */
-    protected InputStream renderHtml(String contextPath, WebResource resource)
-        throws IOException {
-        return renderHtml(contextPath, resource, null);
-    }
-
     protected InputStream renderHtml(String contextPath, WebResource resource, String encoding)
         throws IOException {
 
@@ -1693,15 +1681,6 @@ public class DefaultServlet extends HttpServlet {
 
     }
 
-
-    /**
-     * Get the readme file as a string.
-     * @param directory The directory to search
-     * @return the readme for the specified directory
-     */
-    protected String getReadme(WebResource directory) {
-        return getReadme(directory, null);
-    }
 
     /**
      * Get the readme file as a string.
@@ -2378,7 +2357,8 @@ public class DefaultServlet extends HttpServlet {
         }
     }
 
-    protected static class CompressionFormat {
+    protected static class CompressionFormat implements Serializable {
+        private static final long serialVersionUID = 1L;
         public final String extension;
         public final String encoding;
 

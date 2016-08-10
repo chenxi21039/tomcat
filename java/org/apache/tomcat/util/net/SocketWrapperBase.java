@@ -128,7 +128,7 @@ public abstract class SocketWrapperBase<E> {
     }
 
     /**
-     * Set the timeout for reading. Values of zero or less will be changed to]
+     * Set the timeout for reading. Values of zero or less will be changed to
      * -1.
      *
      * @param readTimeout The timeout in milliseconds. A value of -1 indicates
@@ -297,7 +297,7 @@ public abstract class SocketWrapperBase<E> {
 
 
     public abstract void close() throws IOException;
-
+    public abstract boolean isClosed();
 
     /**
      * Writes the provided data to the socket, buffering any remaining data if
@@ -852,5 +852,4 @@ public abstract class SocketWrapperBase<E> {
         to.put(from);
         from.limit(fromLimit);
     }
-
 }

@@ -68,10 +68,6 @@ public class DeltaManager extends ClusterManagerBase{
 
     // ----------------------------------------------------- Instance Variables
 
-    /**
-     * The descriptive name of this Manager implementation (for logging).
-     */
-    protected static final String managerName = "DeltaManager";
     protected String name = null;
 
     private boolean expireSessionsOnShutdown = false;
