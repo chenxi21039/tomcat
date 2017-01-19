@@ -27,7 +27,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.junit.Assert;
-
 import org.junit.Test;
 
 import org.apache.catalina.Context;
@@ -50,7 +49,7 @@ public class TestWebappClassLoaderExecutorMemoryLeak extends TomcatBaseTest {
 
         ExecutorServlet executorServlet = new ExecutorServlet();
         Tomcat.addServlet(ctx, "taskServlet", executorServlet);
-        ctx.addServletMapping("/", "taskServlet");
+        ctx.addServletMappingDecoded("/", "taskServlet");
 
         tomcat.start();
 

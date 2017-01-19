@@ -115,9 +115,8 @@ public class TestRemoteIpFilter extends TomcatBaseTest {
      */
     public static class MockHttpServletRequest extends Request {
         public MockHttpServletRequest() {
-            super();
+            super(new Connector());
             setCoyoteRequest(new org.apache.coyote.Request());
-            setConnector(new Connector());
         }
 
         public void setHeader(String name, String value) {
@@ -516,7 +515,7 @@ public class TestRemoteIpFilter extends TomcatBaseTest {
 
         FilterMap filterMap = new FilterMap();
         filterMap.setFilterName(RemoteIpFilter.class.getName());
-        filterMap.addURLPattern("*");
+        filterMap.addURLPatternDecoded("*");
         root.addFilterMap(filterMap);
 
         getTomcatInstance().start();
@@ -583,13 +582,13 @@ public class TestRemoteIpFilter extends TomcatBaseTest {
 
         FilterMap filterMap = new FilterMap();
         filterMap.setFilterName(RemoteIpFilter.class.getName());
-        filterMap.addURLPattern("*");
+        filterMap.addURLPatternDecoded("*");
         root.addFilterMap(filterMap);
 
         MockHttpServlet mockServlet = new MockHttpServlet();
 
         Tomcat.addServlet(root, mockServlet.getClass().getName(), mockServlet);
-        root.addServletMapping("/test", mockServlet.getClass().getName());
+        root.addServletMappingDecoded("/test", mockServlet.getClass().getName());
 
         getTomcatInstance().start();
 
@@ -606,7 +605,7 @@ public class TestRemoteIpFilter extends TomcatBaseTest {
         HttpServletRequest request = mockServlet.getRequest();
         Assert.assertNotNull(request);
 
-        // VALIDATE X-FOWARDED-FOR
+        // VALIDATE X-FORWARDED-FOR
         Assert.assertEquals(expectedRemoteAddr, request.getRemoteAddr());
         Assert.assertEquals(expectedRemoteAddr, request.getRemoteHost());
 

@@ -41,7 +41,7 @@ public class StoreAppender {
             Float.class, Float.TYPE, Long.class, Long.TYPE, Short.class,
             Short.TYPE, InetAddress.class };
 
-    private static int pos = 0;
+    private int pos = 0;
 
     /**
      * Print the closing tag.
@@ -203,7 +203,7 @@ public class StoreAppender {
      * @param bean
      *            Bean whose properties are to be rendered as attributes,
      * @param desc
-     *            RegistryDescrpitor from this bean
+     *            RegistryDescriptor from this bean
      *
      * @exception Exception
      *                if an exception occurs while storing
@@ -277,7 +277,7 @@ public class StoreAppender {
      * @param writer PrintWriter to which we are storing
      * @param indent Indentation level
      * @param bean The current bean
-     * @param desc RegistryDescrpitor from this bean
+     * @param desc RegistryDescriptor from this bean
      * @param attributeName The attribute name to store
      * @param bean2 A default instance of the bean for comparison
      * @param value The attribute value

@@ -37,6 +37,7 @@ import org.apache.catalina.startup.TesterServlet;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.catalina.startup.TomcatBaseTest;
 import org.apache.tomcat.unittest.TesterContext;
+import org.apache.tomcat.unittest.TesterRequest;
 import org.apache.tomcat.unittest.TesterServletContext;
 import org.apache.tomcat.util.buf.ByteChunk;
 import org.apache.tomcat.util.descriptor.web.LoginConfig;
@@ -275,9 +276,9 @@ public class TestDigestAuthenticator extends TomcatBaseTest {
 
         // Add protected servlet
         Tomcat.addServlet(ctxt, "TesterServlet", new TesterServlet());
-        ctxt.addServletMapping(URI, "TesterServlet");
+        ctxt.addServletMappingDecoded(URI, "TesterServlet");
         SecurityCollection collection = new SecurityCollection();
-        collection.addPattern(URI);
+        collection.addPatternDecoded(URI);
         SecurityConstraint sc = new SecurityConstraint();
         sc.addAuthRole(ROLE);
         sc.addCollection(collection);
@@ -387,14 +388,5 @@ public class TestDigestAuthenticator extends TomcatBaseTest {
     private static String digest(String input) {
         return MD5Encoder.encode(
                 ConcurrentMessageDigest.digestMD5(input.getBytes()));
-    }
-
-
-    private static class TesterRequest extends Request {
-
-        @Override
-        public String getRemoteAddr() {
-            return "127.0.0.1";
-        }
     }
 }

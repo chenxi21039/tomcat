@@ -28,13 +28,18 @@ import java.security.cert.CertStore;
 import java.security.cert.CertStoreParameters;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateFactory;
+import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.CollectionCertStoreParameters;
 import java.security.cert.PKIXBuilderParameters;
 import java.security.cert.X509CertSelector;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -44,8 +49,6 @@ import javax.net.ssl.CertPathTrustManagerParameters;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.ManagerFactoryParameters;
-import javax.net.ssl.SSLServerSocket;
-import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSessionContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -90,29 +93,22 @@ public class JSSEUtil extends SSLUtilBase {
             throw new IllegalArgumentException(e);
         }
 
-        // There is no standard way to determine the default protocols and
-        // cipher suites so create a server socket to see what the defaults are
-        SSLServerSocketFactory ssf = context.getServerSocketFactory();
-        implementedProtocols = new HashSet<>();
-        try (SSLServerSocket socket = (SSLServerSocket) ssf.createServerSocket()) {
-            // Filter out all the SSL protocols (SSLv2 and SSLv3) from the
-            // defaults since they are no longer considered secure but allow
-            // SSLv2Hello
-            for (String protocol : socket.getEnabledProtocols()) {
-                String protocolUpper = protocol.toUpperCase(Locale.ENGLISH);
-                if (!"SSLV2HELLO".equals(protocolUpper)) {
-                    if (protocolUpper.contains("SSL")) {
-                        log.debug(sm.getString("jsse.excludeDefaultProtocol", protocol));
-                        continue;
-                    }
-                }
-                implementedProtocols.add(protocol);
-            }
-        } catch (IOException e) {
-            // This is very likely to be fatal but there is a slim chance that
-            // the JSSE implementation just doesn't like creating unbound
-            // sockets so allow the code to proceed.
+        String[] implementedProtocolsArray = context.getSupportedSSLParameters().getProtocols();
+        implementedProtocols = new HashSet<>(implementedProtocolsArray.length);
 
+        // Filter out all the SSL protocols (SSLv2 and SSLv3) from the list of
+        // implemented protocols since they are no longer considered secure but
+        // allow SSLv2Hello. This has the effect of making it impossible to use
+        // SSLv2 or SSLv3 without source code changes.
+        for (String protocol : implementedProtocolsArray) {
+            String protocolUpper = protocol.toUpperCase(Locale.ENGLISH);
+            if (!"SSLV2HELLO".equals(protocolUpper)) {
+                if (protocolUpper.contains("SSL")) {
+                    log.debug(sm.getString("jsse.excludeProtocol", protocol));
+                    continue;
+                }
+            }
+            implementedProtocols.add(protocol);
         }
 
         if (implementedProtocols.size() == 0) {
@@ -241,9 +237,6 @@ public class JSSEUtil extends SSLUtilBase {
 
     @Override
     public TrustManager[] getTrustManagers() throws Exception {
-        String algorithm = sslHostConfig.getTruststoreAlgorithm();
-
-        String crlf = sslHostConfig.getCertificateRevocationListFile();
 
         String className = sslHostConfig.getTrustManagerClassName();
         if(className != null && className.length() > 0) {
@@ -261,22 +254,62 @@ public class JSSEUtil extends SSLUtilBase {
         TrustManager[] tms = null;
 
         KeyStore trustStore = sslHostConfig.getTruststore();
-        if (trustStore != null || className != null) {
-            if (crlf == null) {
+        if (trustStore != null) {
+            checkTrustStoreEntries(trustStore);
+            String algorithm = sslHostConfig.getTruststoreAlgorithm();
+            String crlf = sslHostConfig.getCertificateRevocationListFile();
+
+            if ("PKIX".equalsIgnoreCase(algorithm)) {
                 TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
-                tmf.init(trustStore);
-                tms = tmf.getTrustManagers();
-            } else {
-                TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
-                CertPathParameters params = getParameters(algorithm, crlf, trustStore);
+                CertPathParameters params = getParameters(crlf, trustStore);
                 ManagerFactoryParameters mfp = new CertPathTrustManagerParameters(params);
                 tmf.init(mfp);
                 tms = tmf.getTrustManagers();
+            } else {
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
+                tmf.init(trustStore);
+                tms = tmf.getTrustManagers();
+                if (crlf != null && crlf.length() > 0) {
+                    throw new CRLException(sm.getString("jsseUtil.noCrlSupport", algorithm));
+                }
+                log.warn(sm.getString("jsseUtil.noVerificationDepth"));
             }
         }
 
         return tms;
     }
+
+
+    private void checkTrustStoreEntries(KeyStore trustStore) throws Exception {
+        Enumeration<String> aliases = trustStore.aliases();
+        if (aliases != null) {
+            Date now = new Date();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                if (trustStore.isCertificateEntry(alias)) {
+                    Certificate cert = trustStore.getCertificate(alias);
+                    if (cert instanceof X509Certificate) {
+                        try {
+                            ((X509Certificate) cert).checkValidity(now);
+                        } catch (CertificateExpiredException | CertificateNotYetValidException e) {
+                            String msg = sm.getString("jsseUtil.trustedCertNotValid", alias,
+                                    ((X509Certificate) cert).getSubjectDN(), e.getMessage());
+                            if (log.isDebugEnabled()) {
+                                log.debug(msg, e);
+                            } else {
+                                log.warn(msg);
+                            }
+                        }
+                    } else {
+                        if (log.isDebugEnabled()) {
+                            log.debug(sm.getString("jsseUtil.trustedCertNotChecked", alias));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     @Override
     public void configureSessionContext(SSLSessionContext sslSessionContext) {
@@ -289,28 +322,26 @@ public class JSSEUtil extends SSLUtilBase {
      * Return the initialization parameters for the TrustManager.
      * Currently, only the default <code>PKIX</code> is supported.
      *
-     * @param algorithm The algorithm to get parameters for.
      * @param crlf The path to the CRL file.
      * @param trustStore The configured TrustStore.
      * @return The parameters including the CRLs and TrustStore.
      * @throws Exception An error occurred
      */
-    protected CertPathParameters getParameters(String algorithm, String crlf,
-            KeyStore trustStore) throws Exception {
+    protected CertPathParameters getParameters(String crlf, KeyStore trustStore) throws Exception {
 
-        if("PKIX".equalsIgnoreCase(algorithm)) {
-            PKIXBuilderParameters xparams =
-                    new PKIXBuilderParameters(trustStore, new X509CertSelector());
+        PKIXBuilderParameters xparams =
+                new PKIXBuilderParameters(trustStore, new X509CertSelector());
+        if (crlf != null && crlf.length() > 0) {
             Collection<? extends CRL> crls = getCRLs(crlf);
             CertStoreParameters csp = new CollectionCertStoreParameters(crls);
             CertStore store = CertStore.getInstance("Collection", csp);
             xparams.addCertStore(store);
             xparams.setRevocationEnabled(true);
-            xparams.setMaxPathLength(sslHostConfig.getCertificateVerificationDepth());
-            return xparams;
         } else {
-            throw new CRLException("CRLs not supported for type: "+algorithm);
+            xparams.setRevocationEnabled(false);
         }
+        xparams.setMaxPathLength(sslHostConfig.getCertificateVerificationDepth());
+        return xparams;
     }
 
 

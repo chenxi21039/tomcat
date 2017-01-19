@@ -875,7 +875,9 @@ public interface Context extends Container, ContextBind {
      * @param pattern URL pattern to be mapped
      * @param name Name of the corresponding servlet to execute
      */
-    public void addServletMapping(String pattern, String name);
+    public default void addServletMappingDecoded(String pattern, String name) {
+        addServletMappingDecoded(pattern, name, false);
+    }
 
 
     /**
@@ -887,7 +889,7 @@ public interface Context extends Container, ContextBind {
      * @param jspWildcard true if name identifies the JspServlet
      * and pattern contains a wildcard; false otherwise
      */
-    public void addServletMapping(String pattern, String name,
+    public void addServletMappingDecoded(String pattern, String name,
             boolean jspWildcard);
 
 

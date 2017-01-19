@@ -474,7 +474,7 @@ public class StandardHost extends ContainerBase implements Host {
     /**
      * Deploy XML Context config files flag mutator.
      *
-     * @param deployXML <code>true</code> if context descirptors should be deployed
+     * @param deployXML <code>true</code> if context descriptors should be deployed
      */
     public void setDeployXML(boolean deployXML) {
 
@@ -582,7 +582,7 @@ public class StandardHost extends ContainerBase implements Host {
     /**
      * Unpack WARs flag mutator.
      *
-     * @param unpackWARs <code>true</code> to unpack WARs on deployement
+     * @param unpackWARs <code>true</code> to unpack WARs on deployment
      */
     public void setUnpackWARs(boolean unpackWARs) {
 
@@ -834,24 +834,6 @@ public class StandardHost extends ContainerBase implements Host {
 
     }
 
-
-    /**
-     * @return a String representation of this component.
-     */
-    @Override
-    public String toString() {
-
-        StringBuilder sb = new StringBuilder();
-        if (getParent() != null) {
-            sb.append(getParent().toString());
-            sb.append(".");
-        }
-        sb.append("StandardHost[");
-        sb.append(getName());
-        sb.append("]");
-        return (sb.toString());
-
-    }
 
     /**
      * Start this component and implement the requirements

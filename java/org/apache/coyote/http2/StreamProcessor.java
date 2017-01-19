@@ -17,28 +17,24 @@
 package org.apache.coyote.http2;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Iterator;
 
 import org.apache.coyote.AbstractProcessor;
 import org.apache.coyote.ActionCode;
 import org.apache.coyote.Adapter;
-import org.apache.coyote.AsyncContextCallback;
 import org.apache.coyote.ContainerThreadMarker;
 import org.apache.coyote.ErrorState;
 import org.apache.coyote.PushToken;
-import org.apache.coyote.UpgradeToken;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.buf.ByteChunk;
 import org.apache.tomcat.util.net.AbstractEndpoint.Handler.SocketState;
 import org.apache.tomcat.util.net.DispatchType;
-import org.apache.tomcat.util.net.SSLSupport;
 import org.apache.tomcat.util.net.SocketEvent;
 import org.apache.tomcat.util.net.SocketWrapperBase;
 import org.apache.tomcat.util.res.StringManager;
 
-public class StreamProcessor extends AbstractProcessor implements Runnable {
+class StreamProcessor extends AbstractProcessor {
 
     private static final Log log = LogFactory.getLog(StreamProcessor.class);
     private static final StringManager sm = StringManager.getManager(StreamProcessor.class);
@@ -46,10 +42,9 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
     private final Http2UpgradeHandler handler;
     private final Stream stream;
 
-    private volatile SSLSupport sslSupport;
 
-
-    public StreamProcessor(Http2UpgradeHandler handler, Stream stream, Adapter adapter, SocketWrapperBase<?> socketWrapper) {
+    StreamProcessor(Http2UpgradeHandler handler, Stream stream, Adapter adapter,
+            SocketWrapperBase<?> socketWrapper) {
         super(stream.getCoyoteRequest(), stream.getCoyoteResponse());
         this.handler = handler;
         this.stream = stream;
@@ -58,8 +53,7 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
     }
 
 
-    @Override
-    public void run() {
+    final void process(SocketEvent event) {
         try {
             // FIXME: the regular processor syncs on socketWrapper, but here this deadlocks
             synchronized (this) {
@@ -68,7 +62,7 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
                 ContainerThreadMarker.set();
                 SocketState state = SocketState.CLOSED;
                 try {
-                    state = process(socketWrapper, SocketEvent.OPEN_READ);
+                    state = process(socketWrapper, event);
 
                     if (state == SocketState.CLOSED) {
                         if (!getErrorState().isConnectionIoAllowed()) {
@@ -101,286 +95,126 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
 
 
     @Override
-    public void action(ActionCode actionCode, Object param) {
-        switch (actionCode) {
-        // 'Normal' servlet support
-        case COMMIT: {
-            if (!response.isCommitted()) {
-                try {
-                    response.setCommitted(true);
-                    stream.writeHeaders();
-                } catch (IOException ioe) {
-                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
-                }
-            }
-            break;
-        }
-        case CLOSE: {
-            action(ActionCode.COMMIT, null);
+    protected final void prepareResponse() throws IOException {
+        response.setCommitted(true);
+        stream.writeHeaders();
+    }
+
+
+    @Override
+    protected final void finishResponse() throws IOException {
+        stream.getOutputBuffer().close();
+    }
+
+
+    @Override
+    protected final void ack() {
+        if (!response.isCommitted() && request.hasExpectation()) {
             try {
-                stream.getOutputBuffer().close();
+                stream.writeAck();
             } catch (IOException ioe) {
                 setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
             }
-            break;
-        }
-        case ACK: {
-            if (!response.isCommitted() && request.hasExpectation()) {
-                try {
-                    stream.writeAck();
-                } catch (IOException ioe) {
-                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
-                }
-            }
-            break;
-        }
-        case CLIENT_FLUSH: {
-            action(ActionCode.COMMIT, null);
-            try {
-                stream.flushData();
-            } catch (IOException ioe) {
-                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
-                response.setErrorException(ioe);
-            }
-            break;
-        }
-        case AVAILABLE: {
-            request.setAvailable(stream.getInputBuffer().available());
-            break;
-        }
-        case REQ_SET_BODY_REPLAY: {
-            ByteChunk body = (ByteChunk) param;
-            stream.getInputBuffer().insertReplayedBody(body);
-            stream.receivedEndOfStream();
-            break;
-        }
-        case RESET: {
-            stream.getOutputBuffer().reset();
-            break;
-        }
-
-        // Error handling
-        case IS_ERROR: {
-            ((AtomicBoolean) param).set(getErrorState().isError());
-            break;
-        }
-        case CLOSE_NOW: {
-            // No need to block further output. This is called by the error
-            // reporting valve if the response is already committed. It will
-            // flush any remaining response data before this call.
-            // Setting the error state will then cause this stream to be reset.
-            setErrorState(ErrorState.CLOSE_NOW,  null);
-            break;
-        }
-        case DISABLE_SWALLOW_INPUT: {
-            // NO-OP
-            // HTTP/2 has to swallow any input received to ensure that the flow
-            // control windows are correctly tracked.
-            break;
-        }
-
-        // Request attribute support
-        case REQ_HOST_ADDR_ATTRIBUTE: {
-            request.remoteAddr().setString(socketWrapper.getRemoteAddr());
-            break;
-        }
-        case REQ_HOST_ATTRIBUTE: {
-            request.remoteHost().setString(socketWrapper.getRemoteHost());
-            break;
-        }
-        case REQ_LOCALPORT_ATTRIBUTE: {
-            request.setLocalPort(socketWrapper.getLocalPort());
-            break;
-        }
-        case REQ_LOCAL_ADDR_ATTRIBUTE: {
-            request.localAddr().setString(socketWrapper.getLocalAddr());
-            break;
-        }
-        case REQ_LOCAL_NAME_ATTRIBUTE: {
-            request.localName().setString(socketWrapper.getLocalName());
-            break;
-        }
-        case REQ_REMOTEPORT_ATTRIBUTE: {
-            request.setRemotePort(socketWrapper.getRemotePort());
-            break;
-        }
-
-        // SSL request attribute support
-        case REQ_SSL_ATTRIBUTE: {
-            try {
-                if (sslSupport != null) {
-                    Object sslO = sslSupport.getCipherSuite();
-                    if (sslO != null) {
-                        request.setAttribute(SSLSupport.CIPHER_SUITE_KEY, sslO);
-                    }
-                    sslO = sslSupport.getPeerCertificateChain();
-                    if (sslO != null) {
-                        request.setAttribute(SSLSupport.CERTIFICATE_KEY, sslO);
-                    }
-                    sslO = sslSupport.getKeySize();
-                    if (sslO != null) {
-                        request.setAttribute(SSLSupport.KEY_SIZE_KEY, sslO);
-                    }
-                    sslO = sslSupport.getSessionId();
-                    if (sslO != null) {
-                        request.setAttribute(SSLSupport.SESSION_ID_KEY, sslO);
-                    }
-                    sslO = sslSupport.getProtocol();
-                    if (sslO != null) {
-                        request.setAttribute(SSLSupport.PROTOCOL_VERSION_KEY, sslO);
-                    }
-                    request.setAttribute(SSLSupport.SESSION_MGR, sslSupport);
-                }
-            } catch (Exception e) {
-                log.warn(sm.getString("streamProcessor.ssl.error"), e);
-            }
-            break;
-        }
-        case REQ_SSL_CERTIFICATE: {
-            // No re-negotiation support in HTTP/2. Either the certificate is
-            // available or it isn't.
-            try {
-                if (sslSupport != null) {
-                    Object sslO = sslSupport.getCipherSuite();
-                    sslO = sslSupport.getPeerCertificateChain();
-                    if (sslO != null) {
-                        request.setAttribute(SSLSupport.CERTIFICATE_KEY, sslO);
-                    }
-                }
-            } catch (Exception e) {
-                log.warn(sm.getString("streamProcessor.ssl.error"), e);
-            }
-            break;
-        }
-
-        // Servlet 3.0 asynchronous support
-        case ASYNC_START: {
-            asyncStateMachine.asyncStart((AsyncContextCallback) param);
-            break;
-        }
-        case ASYNC_COMPLETE: {
-            if (asyncStateMachine.asyncComplete()) {
-                socketWrapper.getEndpoint().getExecutor().execute(this);
-            }
-            break;
-        }
-        case ASYNC_DISPATCH: {
-            if (asyncStateMachine.asyncDispatch()) {
-                socketWrapper.getEndpoint().getExecutor().execute(this);
-            }
-            break;
-        }
-        case ASYNC_DISPATCHED: {
-            asyncStateMachine.asyncDispatched();
-            break;
-        }
-        case ASYNC_ERROR: {
-            asyncStateMachine.asyncError();
-            break;
-        }
-        case ASYNC_IS_ASYNC: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsync());
-            break;
-        }
-        case ASYNC_IS_COMPLETING: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isCompleting());
-            break;
-        }
-        case ASYNC_IS_DISPATCHING: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncDispatching());
-            break;
-        }
-        case ASYNC_IS_ERROR: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncError());
-            break;
-        }
-        case ASYNC_IS_STARTED: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncStarted());
-            break;
-        }
-        case ASYNC_IS_TIMINGOUT: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncTimingOut());
-            break;
-        }
-        case ASYNC_RUN: {
-            asyncStateMachine.asyncRun((Runnable) param);
-            break;
-        }
-        case ASYNC_SETTIMEOUT: {
-            if (param == null) {
-                return;
-            }
-            long timeout = ((Long) param).longValue();
-            setAsyncTimeout(timeout);
-            break;
-        }
-        case ASYNC_TIMEOUT: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(asyncStateMachine.asyncTimeout());
-            break;
-        }
-        case ASYNC_POST_PROCESS: {
-            asyncStateMachine.asyncPostProcess();
-            break;
-        }
-
-        // Servlet 3.1 non-blocking I/O
-        case REQUEST_BODY_FULLY_READ: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(stream.getInputBuffer().isRequestBodyFullyRead());
-            break;
-        }
-        case NB_READ_INTEREST: {
-            stream.getInputBuffer().registerReadInterest();
-            break;
-        }
-        case NB_WRITE_INTEREST: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(stream.getOutputBuffer().isReady());
-            break;
-        }
-        case DISPATCH_READ: {
-            addDispatch(DispatchType.NON_BLOCKING_READ);
-            break;
-        }
-        case DISPATCH_WRITE: {
-            addDispatch(DispatchType.NON_BLOCKING_WRITE);
-            break;
-        }
-        case DISPATCH_EXECUTE: {
-            socketWrapper.getEndpoint().getExecutor().execute(this);
-            break;
-        }
-
-        // Servlet 3.1 HTTP Upgrade
-        case UPGRADE: {
-            // Unsupported / illegal under HTTP/2
-            throw new UnsupportedOperationException(
-                    sm.getString("streamProcessor.httpupgrade.notsupported"));
-        }
-
-        // Servlet 4.0 Push requests
-        case IS_PUSH_SUPPORTED: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(stream.isPushSupported());
-            break;
-        }
-        case PUSH_REQUEST: {
-            try {
-                PushToken pushToken = (PushToken) param;
-                pushToken.setResult(stream.push(pushToken.getPushTarget()));
-            } catch (IOException ioe) {
-                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
-                response.setErrorException(ioe);
-            }
-            break;
-        }
         }
     }
 
 
     @Override
-    public void recycle() {
+    protected final void flush() throws IOException {
+        stream.flushData();
+    }
+
+
+    @Override
+    protected final int available(boolean doRead) {
+        return stream.getInputBuffer().available();
+    }
+
+
+    @Override
+    protected final void setRequestBody(ByteChunk body) {
+        stream.getInputBuffer().insertReplayedBody(body);
+        stream.receivedEndOfStream();
+    }
+
+
+    @Override
+    protected final void setSwallowResponse() {
+        // NO-OP
+    }
+
+
+    @Override
+    protected final void disableSwallowRequest() {
+        // NO-OP
+        // HTTP/2 has to swallow any input received to ensure that the flow
+        // control windows are correctly tracked.
+    }
+
+
+    @Override
+    protected void processSocketEvent(SocketEvent event, boolean dispatch) {
+        if (dispatch) {
+            handler.processStreamOnContainerThread(this, event);
+        } else {
+            this.process(event);
+        }
+    }
+
+
+    @Override
+    protected final boolean isRequestBodyFullyRead() {
+        return stream.getInputBuffer().isRequestBodyFullyRead();
+    }
+
+
+    @Override
+    protected final void registerReadInterest() {
+        stream.getInputBuffer().registerReadInterest();
+    }
+
+
+    @Override
+    protected final boolean isReady() {
+        return stream.getOutputBuffer().isReady();
+    }
+
+
+    @Override
+    protected final void executeDispatches() {
+        Iterator<DispatchType> dispatches = getIteratorAndClearDispatches();
+        synchronized (this) {
+            /*
+             * TODO Check if this sync is necessary.
+             *      Compare with superrclass that uses SocketWrapper
+             */
+            while (dispatches != null && dispatches.hasNext()) {
+                DispatchType dispatchType = dispatches.next();
+                processSocketEvent(dispatchType.getSocketStatus(), false);
+            }
+        }
+    }
+
+
+    @Override
+    protected final boolean isPushSupported() {
+        return stream.isPushSupported();
+    }
+
+
+    @Override
+    protected final void doPush(PushToken pushToken) {
+        try {
+            pushToken.setResult(stream.push(pushToken.getPushTarget()));
+        } catch (IOException ioe) {
+            setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+            response.setErrorException(ioe);
+        }
+    }
+
+
+    @Override
+    public final void recycle() {
         // StreamProcessor instances are not re-used.
         // Clear fields that can be cleared to aid GC and trigger NPEs if this
         // is reused
@@ -390,31 +224,26 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
 
 
     @Override
-    public boolean isUpgrade() {
-        return false;
-    }
-
-
-    @Override
-    protected Log getLog() {
+    protected final Log getLog() {
         return log;
     }
 
 
     @Override
-    public void pause() {
+    public final void pause() {
         // NO-OP. Handled by the Http2UpgradeHandler
     }
 
 
     @Override
-    public SocketState service(SocketWrapperBase<?> socket) throws IOException {
+    public final SocketState service(SocketWrapperBase<?> socket) throws IOException {
         try {
             adapter.service(request, response);
         } catch (Exception e) {
             if (log.isDebugEnabled()) {
                 log.debug(sm.getString("streamProcessor.service.error"), e);
             }
+            response.setStatus(500);
             setErrorState(ErrorState.CLOSE_NOW, e);
         }
 
@@ -433,7 +262,7 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
 
 
     @Override
-    protected boolean flushBufferedWrite() throws IOException {
+    protected final boolean flushBufferedWrite() throws IOException {
         if (stream.getOutputBuffer().flush(false)) {
             // The buffer wasn't fully flushed so re-register the
             // stream for write. Note this does not go via the
@@ -453,21 +282,7 @@ public class StreamProcessor extends AbstractProcessor implements Runnable {
 
 
     @Override
-    protected SocketState dispatchEndRequest() {
+    protected final SocketState dispatchEndRequest() {
         return SocketState.CLOSED;
-    }
-
-
-    @Override
-    public UpgradeToken getUpgradeToken() {
-        // Should never happen
-        throw new IllegalStateException(sm.getString("streamProcessor.httpupgrade.notsupported"));
-    }
-
-
-    @Override
-    public ByteBuffer getLeftoverInput() {
-        // Should never happen
-        throw new IllegalStateException(sm.getString("streamProcessor.httpupgrade.notsupported"));
     }
 }

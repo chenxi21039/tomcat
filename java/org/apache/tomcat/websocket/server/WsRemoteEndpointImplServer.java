@@ -20,14 +20,13 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 import javax.websocket.SendHandler;
 import javax.websocket.SendResult;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
-import org.apache.tomcat.util.net.AbstractEndpoint;
 import org.apache.tomcat.util.net.SocketWrapperBase;
 import org.apache.tomcat.util.res.StringManager;
 import org.apache.tomcat.websocket.Transformation;
@@ -77,18 +76,16 @@ public class WsRemoteEndpointImplServer extends WsRemoteEndpointImplBase {
             // Blocking
             for (ByteBuffer buffer : buffers) {
                 long timeout = blockingWriteTimeoutExpiry - System.currentTimeMillis();
-                if (timeout < 0) {
+                if (timeout <= 0) {
                     SendResult sr = new SendResult(new SocketTimeoutException());
                     handler.onResult(sr);
                     return;
                 }
                 socketWrapper.setWriteTimeout(timeout);
                 try {
-                    socketWrapper.write(true, buffer.array(), buffer.arrayOffset(),
-                                    buffer.limit());
-                    buffer.position(buffer.limit());
+                    socketWrapper.write(true, buffer);
                     timeout = blockingWriteTimeoutExpiry - System.currentTimeMillis();
-                    if (timeout < 0) {
+                    if (timeout <= 0) {
                         SendResult sr = new SendResult(new SocketTimeoutException());
                         handler.onResult(sr);
                         return;
@@ -121,9 +118,7 @@ public class WsRemoteEndpointImplServer extends WsRemoteEndpointImplBase {
                 for (ByteBuffer buffer : buffers) {
                     if (buffer.hasRemaining()) {
                         complete = false;
-                        socketWrapper.write(
-                                false, buffer.array(), buffer.arrayOffset(), buffer.limit());
-                        buffer.position(buffer.limit());
+                        socketWrapper.write(false, buffer);
                         break;
                     }
                 }
@@ -226,11 +221,9 @@ public class WsRemoteEndpointImplServer extends WsRemoteEndpointImplBase {
         if (sh != null) {
             if (useDispatch) {
                 OnResultRunnable r = new OnResultRunnable(sh, t);
-                AbstractEndpoint<?> endpoint = socketWrapper.getEndpoint();
-                Executor containerExecutor = endpoint.getExecutor();
-                if (endpoint.isRunning() && containerExecutor != null) {
-                    containerExecutor.execute(r);
-                } else {
+                try {
+                    socketWrapper.execute(r);
+                } catch (RejectedExecutionException ree) {
                     // Can't use the executor so call the runnable directly.
                     // This may not be strictly specification compliant in all
                     // cases but during shutdown only close messages are going

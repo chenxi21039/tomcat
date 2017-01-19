@@ -83,6 +83,7 @@ import org.apache.catalina.core.ApplicationSessionCookieConfig;
 import org.apache.catalina.core.AsyncContextImpl;
 import org.apache.catalina.mapper.MappingData;
 import org.apache.catalina.util.ParameterMap;
+import org.apache.catalina.util.RequestUtil;
 import org.apache.catalina.util.URLEncoder;
 import org.apache.coyote.ActionCode;
 import org.apache.coyote.UpgradeToken;
@@ -124,10 +125,17 @@ public class Request implements HttpServletRequest {
 
     private static final Log log = LogFactory.getLog(Request.class);
 
-    // ----------------------------------------------------------- Constructors
+    /**
+     * Create a new Request object associated with the given Connector.
+     *
+     * @param connector The Connector with which this Request object will always
+     *                  be associated. In normal usage this must be non-null. In
+     *                  some test scenarios, it may be possible to use a null
+     *                  Connector without triggering an NPE.
+     */
+    public Request(Connector connector) {
+        this.connector = connector;
 
-
-    public Request() {
         formats = new SimpleDateFormat[formatsTemplate.length];
         for(int i = 0; i < formats.length; i++) {
             formats[i] = (SimpleDateFormat) formatsTemplate[i].clone();
@@ -544,22 +552,13 @@ public class Request implements HttpServletRequest {
     /**
      * Associated Catalina connector.
      */
-    protected Connector connector;
+    protected final Connector connector;
 
     /**
      * @return the Connector through which this Request was received.
      */
     public Connector getConnector() {
         return this.connector;
-    }
-
-    /**
-     * Set the Connector through which this Request was received.
-     *
-     * @param connector The new connector
-     */
-    public void setConnector(Connector connector) {
-        this.connector = connector;
     }
 
 
@@ -574,18 +573,6 @@ public class Request implements HttpServletRequest {
      */
     public Context getContext() {
         return mappingData.context;
-    }
-
-    /**
-     * @param context The newly associated Context
-     * @deprecated Use setters on {@link #getMappingData() MappingData} object.
-     * Depending on use case, you may need to update other
-     * <code>MappingData</code> fields as well, such as
-     * <code>contextSlashCount</code> and <code>host</code>.
-     */
-    @Deprecated
-    public void setContext(Context context) {
-        mappingData.context = context;
     }
 
 
@@ -737,21 +724,8 @@ public class Request implements HttpServletRequest {
         return mappingData.wrapper;
     }
 
-    /**
-     * @param wrapper The newly associated Wrapper
-     * @deprecated Use setters on {@link #getMappingData() MappingData} object.
-     * Depending on use case, you may need to update other
-     * <code>MappingData</code> fields as well, such as <code>context</code>
-     * and <code>contextSlashCount</code>.
-     */
-    @Deprecated
-    public void setWrapper(Wrapper wrapper) {
-        mappingData.wrapper = wrapper;
-    }
-
 
     // ------------------------------------------------- Request Public Methods
-
 
     /**
      * Create and return a ServletInputStream to read the content
@@ -981,7 +955,7 @@ public class Request implements HttpServletRequest {
         if (isSecure() && !sslAttributesParsed) {
             getAttribute(Globals.CERTIFICATES_ATTR);
         }
-        // Take a copy to prevent ConncurrentModificationExceptions if used to
+        // Take a copy to prevent ConcurrentModificationExceptions if used to
         // remove attributes
         Set<String> names = new HashSet<>();
         names.addAll(attributes.keySet());
@@ -2288,44 +2262,9 @@ public class Request implements HttpServletRequest {
     }
 
 
-    /**
-     * Reconstructs the URL the client used to make the request.
-     * The returned URL contains a protocol, server name, port
-     * number, and server path, but it does not include query
-     * string parameters.
-     * <p>
-     * Because this method returns a <code>StringBuffer</code>,
-     * not a <code>String</code>, you can modify the URL easily,
-     * for example, to append query parameters.
-     * <p>
-     * This method is useful for creating redirect messages and
-     * for reporting errors.
-     *
-     * @return A <code>StringBuffer</code> object containing the
-     *  reconstructed URL
-     */
     @Override
     public StringBuffer getRequestURL() {
-
-        StringBuffer url = new StringBuffer();
-        String scheme = getScheme();
-        int port = getServerPort();
-        if (port < 0)
-         {
-            port = 80; // Work around java.net.URL bug
-        }
-
-        url.append(scheme);
-        url.append("://");
-        url.append(getServerName());
-        if ((scheme.equals("http") && (port != 80))
-            || (scheme.equals("https") && (port != 443))) {
-            url.append(':');
-            url.append(port);
-        }
-        url.append(getRequestURI());
-
-        return url;
+        return RequestUtil.getRequestURL(this);
     }
 
 
@@ -3051,6 +2990,7 @@ public class Request implements HttpServletRequest {
         cookiesParsed = true;
 
         ServerCookies serverCookies = coyoteRequest.getCookies();
+        serverCookies.setLimit(connector.getMaxCookieCount());
         CookieProcessor cookieProcessor = getContext().getCookieProcessor();
         cookieProcessor.parseCookieHeader(coyoteRequest.getMimeHeaders(), serverCookies);
     }

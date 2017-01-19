@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.catalina.util.IOTools;
@@ -44,11 +45,19 @@ public class TesterOpenSSL {
         } catch (IOException e) {
             versionString = "";
         }
-        if (versionString.startsWith("OpenSSL 1.1.0")) {
+        if (versionString.startsWith("OpenSSL 1.1.1")) {
+            // Note: Gump currently tests 9.0.x with OpenSSL master
+            //       (a.k.a 1.1.1-dev)
+            VERSION = 10101;
+        } else if (versionString.startsWith("OpenSSL 1.1.0")) {
+            // Support ends 2018-04-30
             VERSION = 10100;
         } else if (versionString.startsWith("OpenSSL 1.0.2")) {
+            // Support ends 2019-12-31 (LTS)
+            // Note: Gump current tests 8.0.x with OpenSSL 1.0.2
             VERSION = 10002;
         } else if (versionString.startsWith("OpenSSL 1.0.1")) {
+            // Support ends 2016-12-31
             VERSION = 10001;
         // Note: Release branches 1.0.0 and earlier are no longer supported by
         //       the OpenSSL team so these tests don't support them either.
@@ -56,7 +65,7 @@ public class TesterOpenSSL {
             VERSION = -1;
         }
 
-         HashSet<Cipher> unimplemented = new HashSet<>();
+        HashSet<Cipher> unimplemented = new HashSet<>();
 
         // These have been removed from all supported versions.
         unimplemented.add(Cipher.TLS_DHE_DSS_WITH_RC4_128_SHA);
@@ -118,7 +127,6 @@ public class TesterOpenSSL {
             unimplemented.add(Cipher.TLS_DH_RSA_WITH_DES_CBC_SHA);
             unimplemented.add(Cipher.TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA);
             unimplemented.add(Cipher.TLS_DH_RSA_WITH_SEED_CBC_SHA);
-
         } else {
             // These were removed in 1.0.2 so won't be available from that
             // version onwards.
@@ -275,6 +283,21 @@ public class TesterOpenSSL {
             unimplemented.add(Cipher.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA);
             unimplemented.add(Cipher.TLS_DHE_PSK_WITH_RC4_128_SHA);
             unimplemented.add(Cipher.TLS_ECDH_anon_WITH_RC4_128_SHA);
+            // 3DES requires a compile time switch to enable. Treat as removed.
+            unimplemented.add(Cipher.TLS_PSK_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_DH_anon_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_RSA_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA);
+            unimplemented.add(Cipher.TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA);
         }
         OPENSSL_UNIMPLEMENTED_CIPHERS = Collections.unmodifiableSet(unimplemented);
     }
@@ -301,11 +324,7 @@ public class TesterOpenSSL {
         if (specification == null) {
             stdout = executeOpenSSLCommand("ciphers", "-v");
         } else {
-            if (VERSION < 10000) {
-                stdout = executeOpenSSLCommand("ciphers", "-v", specification);
-            } else {
-                stdout = executeOpenSSLCommand("ciphers", "-v", specification);
-            }
+            stdout = executeOpenSSLCommand("ciphers", "-v", specification);
         }
 
         if (stdout.length() == 0) {
@@ -358,8 +377,14 @@ public class TesterOpenSSL {
 
     private static String executeOpenSSLCommand(String... args) throws IOException {
         String openSSLPath = System.getProperty("tomcat.test.openssl.path");
+        String openSSLLibPath = null;
         if (openSSLPath == null || openSSLPath.length() == 0) {
             openSSLPath = "openssl";
+        } else {
+            // Explicit OpenSSL path may also need explicit lib path
+            // (e.g. Gump needs this)
+            openSSLLibPath = openSSLPath.substring(0, openSSLPath.lastIndexOf('/'));
+            openSSLLibPath = openSSLLibPath + "/../lib";
         }
         List<String> cmd = new ArrayList<>();
         cmd.add(openSSLPath);
@@ -368,6 +393,18 @@ public class TesterOpenSSL {
         }
 
         ProcessBuilder pb = new ProcessBuilder(cmd.toArray(new String[cmd.size()]));
+
+        if (openSSLLibPath != null) {
+            Map<String,String> env = pb.environment();
+            String libraryPath = env.get("LD_LIBRARY_PATH");
+            if (libraryPath == null) {
+                libraryPath = openSSLLibPath;
+            } else {
+                libraryPath = libraryPath + ":" + openSSLLibPath;
+            }
+            env.put("LD_LIBRARY_PATH", libraryPath);
+        }
+
         Process p = pb.start();
 
         InputStreamToText stdout = new InputStreamToText(p.getInputStream());

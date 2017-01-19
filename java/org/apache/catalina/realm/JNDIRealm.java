@@ -29,7 +29,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Hashtable;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -233,12 +232,6 @@ public class JNDIRealm extends RealmBase {
      * the manner in which aliases should be dereferenced.
      */
     public static final String DEREF_ALIASES = "java.naming.ldap.derefAliases";
-
-
-    /**
-     * Descriptive information about this Realm implementation.
-     */
-    protected static final String name = "JNDIRealm";
 
 
     /**
@@ -1115,7 +1108,7 @@ public class JNDIRealm extends RealmBase {
         } else {
             this.cipherSuitesArray = cipherSuites.trim().split("\\s*,\\s*");
             containerLog.debug(sm.getString("jndiRealm.cipherSuites",
-                    Arrays.asList(this.cipherSuitesArray)));
+                    Arrays.toString(this.cipherSuitesArray)));
         }
         return this.cipherSuitesArray;
     }
@@ -1354,15 +1347,9 @@ public class JNDIRealm extends RealmBase {
                             // Search for additional roles
                             List<String> roles = getRoles(context, user);
                             if (containerLog.isDebugEnabled()) {
-                                Iterator<String> it = roles.iterator();
-                                // TODO: Use a single log message
-                                while (it.hasNext()) {
-                                    containerLog.debug("Found role: " + it.next());
-                                }
+                                containerLog.debug("Found roles: " + roles.toString());
                             }
-                            return (new GenericPrincipal(username,
-                                                         credentials,
-                                                         roles));
+                            return (new GenericPrincipal(username, credentials, roles));
                         }
                     } catch (InvalidNameException ine) {
                         // Log the problem for posterity
@@ -1388,11 +1375,7 @@ public class JNDIRealm extends RealmBase {
             // Search for additional roles
             List<String> roles = getRoles(context, user);
             if (containerLog.isDebugEnabled()) {
-                Iterator<String> it = roles.iterator();
-                // TODO: Use a single log message
-                while (it.hasNext()) {
-                    containerLog.debug("Found role: " + it.next());
-                }
+                containerLog.debug("Found roles: " + roles.toString());
             }
 
             // Create and return a suitable Principal for this user
@@ -1915,8 +1898,7 @@ public class JNDIRealm extends RealmBase {
 
         if (containerLog.isTraceEnabled()) {
             containerLog.trace("  Found " + list.size() + " user internal roles");
-            for (int i=0; i<list.size(); i++)
-                containerLog.trace(  "  Found user internal role " + list.get(i));
+            containerLog.trace("  Found user internal roles " + list.toString());
         }
 
         // Are we configured to do role searches?
@@ -2180,17 +2162,6 @@ public class JNDIRealm extends RealmBase {
 
 
     /**
-     * @return a short name for this Realm implementation.
-     */
-    @Override
-    protected String getName() {
-
-        return name;
-
-    }
-
-
-    /**
      * Get the password for the specified user.
      * @param username The user name
      * @return the password associated with the given principal's user name.
@@ -2389,6 +2360,12 @@ public class JNDIRealm extends RealmBase {
 
         return context;
 
+    }
+
+    @Override
+    public boolean isAvailable() {
+        // Simple best effort check
+        return (context != null);
     }
 
     private DirContext createDirContext(Hashtable<String, String> env) throws NamingException {
@@ -2703,44 +2680,42 @@ public class JNDIRealm extends RealmBase {
         // Get the entry's distinguished name.  For relative results, this means
         // we need to composite a name with the base name, the context name, and
         // the result name.  For non-relative names, use the returned name.
+        String resultName = result.getName();
         if (result.isRelative()) {
            if (containerLog.isTraceEnabled()) {
-               containerLog.trace("  search returned relative name: " +
-                       result.getName());
+               containerLog.trace("  search returned relative name: " + resultName);
            }
            NameParser parser = context.getNameParser("");
            Name contextName = parser.parse(context.getNameInNamespace());
            Name baseName = parser.parse(base);
 
            // Bugzilla 32269
-           Name entryName =
-               parser.parse(new CompositeName(result.getName()).get(0));
+           Name entryName = parser.parse(new CompositeName(resultName).get(0));
 
            Name name = contextName.addAll(baseName);
            name = name.addAll(entryName);
            return name.toString();
         } else {
-           String absoluteName = result.getName();
-           if (containerLog.isTraceEnabled())
-               containerLog.trace("  search returned absolute name: " +
-                       result.getName());
+           if (containerLog.isTraceEnabled()) {
+               containerLog.trace("  search returned absolute name: " + resultName);
+           }
            try {
                // Normalize the name by running it through the name parser.
                NameParser parser = context.getNameParser("");
-               URI userNameUri = new URI(absoluteName);
+               URI userNameUri = new URI(resultName);
                String pathComponent = userNameUri.getPath();
                // Should not ever have an empty path component, since that is /{DN}
                if (pathComponent.length() < 1 ) {
                    throw new InvalidNameException(
                            "Search returned unparseable absolute name: " +
-                           absoluteName );
+                           resultName );
                }
                Name name = parser.parse(pathComponent.substring(1));
                return name.toString();
            } catch ( URISyntaxException e ) {
                throw new InvalidNameException(
                        "Search returned unparseable absolute name: " +
-                       absoluteName );
+                       resultName );
            }
         }
     }

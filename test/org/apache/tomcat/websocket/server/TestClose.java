@@ -35,7 +35,6 @@ import javax.websocket.server.ServerEndpointConfig;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
-//import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.catalina.Context;
@@ -341,7 +340,7 @@ public class TestClose extends WebSocketBaseTest {
         Context ctx = tomcat.addContext("", null);
         ctx.addApplicationListener(configClass.getName());
         Tomcat.addServlet(ctx, "default", new DefaultServlet());
-        ctx.addServletMapping("/", "default");
+        ctx.addServletMappingDecoded("/", "default");
 
         tomcat.start();
         return tomcat;

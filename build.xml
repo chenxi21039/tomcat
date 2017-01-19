@@ -181,7 +181,7 @@
   <property name="test.jvmarg.egd" value="" />
 
   <!-- Location of OpenSSL binary (file name, not directory) -->
-  <!-- The OpenSSL tests cases be disabled by specifing an invalid path here -->
+  <!-- The OpenSSL tests cases be disabled by specifying an invalid path here -->
   <property name="test.openssl.path" value="" />
 
   <!-- Include .gitignore in src distributions. -->
@@ -325,15 +325,23 @@
     <include name="org/apache/tomcat/websocket/**" />
   </patternset>
 
+  <!-- This duplicates some classes in files.catalina                        -->
+  <!-- Duplicating a few classes in bootstrap.jar is simpler than excluding  -->
+  <!-- them from files.catalina and having to manually add them to           -->
+  <!-- files.tomcat-embed-core because of an include/exclude conflict        -->
+  <!-- between files.catalina and files.bootstrap.                           -->
   <patternset id="files.bootstrap">
     <include name="org/apache/catalina/startup/Bootstrap.*" />
     <include name="org/apache/catalina/startup/catalina.properties" />
     <include name="org/apache/catalina/startup/CatalinaProperties.*" />
     <include name="org/apache/catalina/startup/ClassLoaderFactory.*" />
     <include name="org/apache/catalina/startup/ClassLoaderFactory$*.*" />
+    <include name="org/apache/catalina/startup/SafeForkJoinWorkerThreadFactory.*" />
+    <include name="org/apache/catalina/startup/SafeForkJoinWorkerThreadFactory$*.*" />
     <include name="org/apache/catalina/startup/Tool.*" />
     <include name="org/apache/catalina/security/SecurityClassLoad.*" />
-    <include name="org/apache/naming/JndiPermission.*" />
+    <include name="org/apache/catalina/webresources/war/**" />
+    <include name="org/apache/tomcat/util/buf/UriUtil.*" />
   </patternset>
 
   <patternset id="files.tomcat-juli">
@@ -372,7 +380,6 @@
   <patternset id="files.tomcat-util-scan">
     <include name="org/apache/tomcat/util/descriptor/**" />
     <include name="org/apache/tomcat/util/digester/**" />
-    <include name="org/apache/tomcat/util/file/**" />
     <include name="org/apache/tomcat/util/scan/**" />
   </patternset>
 
@@ -434,7 +441,6 @@
   <!-- Every standard pattern set above should be included in an embedded JAR -->
   <patternset id="files.tomcat-embed-core" >
     <patternset refid="files.annotations-api" />
-    <patternset refid="files.bootstrap" />
     <patternset refid="files.catalina" />
     <patternset refid="files.servlet-api" />
     <patternset refid="files.jaspic-api" />
@@ -542,6 +548,7 @@
         <exclude name="output/**"/>
         <exclude name="modules/**"/>
         <exclude name="**/*.mdl"/>
+        <exclude name="**/*.svg"/>
         <exclude name="**/*_2.xml"/>
         <exclude name="res/checkstyle/header-al2.txt"/>
         <!-- Exclude auto-generated files -->
@@ -555,6 +562,8 @@
         <exclude name="test/webapp/bug53257/**/*.txt"/>
         <exclude name="test/webapp-fragments/WEB-INF/classes/*.txt"/>
         <exclude name="test/webresources/**"/>
+        <!-- Exclude test files with unusual encodings -->
+        <exclude name="test/webapp/jsp/encoding/**"/>
       </fileset>
       <fileset dir="modules/jdbc-pool" >
         <exclude name=".*/**"/>
@@ -609,6 +618,10 @@
         <exclude name="nbproject/**"/>
         <exclude name="output/**"/>
         <exclude name="modules/**"/>
+        <!-- Exclude these since some svn clients do not seem able to handle
+             UTF-16 line-ending conversion -->
+        <exclude name="test/webapp/jsp/encoding/bom-utf16*"/>
+        <exclude name="test/webapp/jsp/encoding/bom-none-prolog-utf16*"/>
       </fileset>
       <fileset dir="modules/jdbc-pool" >
         <patternset refid="text.files" />
@@ -716,7 +729,7 @@
       filesId="files.websocket-api"
       manifest="${tomcat.manifests}/websocket-api.jar.manifest" />
 
-    <!-- JASPIC 1.1 Implementation JAR File -->
+    <!-- JASPIC 1.1 API JAR File -->
     <jarIt jarfile="${jaspic-api.jar}"
       filesDir="${tomcat.classes}"
       filesId="files.jaspic-api"
@@ -1407,13 +1420,14 @@
 
     <sequential>
       <mkdir dir="${test.reports}" />
-      <junit printsummary="yes" fork="yes" dir="." showoutput="yes"
+      <junit printsummary="yes" fork="yes" dir="." showoutput="${test.verbose}"
         errorproperty="test.result.error"
         failureproperty="test.result.failure"
         haltonfailure="${test.haltonfailure}"
         threads="${test.threads}" >
 
         <jvmarg value="${test.jvmarg.egd}"/>
+        <jvmarg value="-Dfile.encoding=UTF-8"/>
         <jvmarg value="-Djava.library.path=${test.apr.loc}"/>
         <jvmarg value="${test.formatter}"/>
         <jvmarg value="-Djava.net.preferIPv4Stack=${java.net.preferIPv4Stack}"/>
@@ -1907,8 +1921,9 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <!-- Copy deployer documentation -->
     <copy todir="${tomcat.deployer}">
       <fileset dir="${tomcat.build}/webapps/docs">
-        <include name="images/asf-logo.gif" />
-        <include name="images/tomcat.gif" />
+        <include name="images/asf-logo.svg" />
+        <include name="images/tomcat.png" />
+        <include name="images/docs-stylesheet.css" />
       </fileset>
     </copy>
     <copy tofile="${tomcat.deployer}/deployer-howto.html"
@@ -2306,7 +2321,7 @@ skip.installer property in build.properties" />
         <exclude name="bin/*.dll"/>
       </tarfileset>
       <!-- These need to be added after the bin directory is added else the  -->
-      <!-- bin diretcory will pick up the wrong permissions.                 -->
+      <!-- bin directory will pick up the wrong permissions.                 -->
       <tarfileset dir="${tomcat.dist}" dirmode="750" filemode="750" prefix="${final.name}">
         <include name="bin/catalina.sh" />
         <include name="bin/configtest.sh" />
@@ -2454,7 +2469,7 @@ skip.installer property in build.properties" />
       filesDir="java"
       filesId="files.tomcat-websocket" />
 
-    <!-- JASPIC 1.1 Implementation JAR File -->
+    <!-- JASPIC 1.1 API JAR File -->
     <jarIt jarfile="${jaspic-api-src.jar}"
       filesDir="java"
       filesId="files.jaspic-api"

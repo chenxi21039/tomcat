@@ -21,7 +21,6 @@ import java.util.Calendar;
 import org.apache.catalina.WebResource;
 import org.apache.catalina.WebResourceRoot;
 import org.apache.catalina.connector.Request;
-
 import org.apache.tomcat.util.http.FastHttpDateFormat;
 
 public class ResolverImpl extends Resolver {
@@ -176,5 +175,10 @@ public class ResolverImpl extends Resolver {
         } else {
             return value;
         }
+    }
+
+    @Override
+    public String getUriEncoding() {
+        return request.getConnector().getURIEncoding();
     }
 }

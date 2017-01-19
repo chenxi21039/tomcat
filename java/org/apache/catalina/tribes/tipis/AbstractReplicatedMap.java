@@ -166,7 +166,7 @@ public abstract class AbstractReplicatedMap<K,V>
      * Creates a new map.
      * @param owner The map owner
      * @param channel The channel to use for communication
-     * @param timeout long - timeout for RPC messags
+     * @param timeout long - timeout for RPC messages
      * @param mapContextName String - unique name for this map, to allow multiple maps per channel
      * @param initialCapacity int - the size of this map, see HashMap
      * @param loadFactor float - load factor, see HashMap
@@ -260,7 +260,6 @@ public abstract class AbstractReplicatedMap<K,V>
      * @throws ChannelException Send error
      */
     protected void ping(long timeout) throws ChannelException {
-        //send out a map membership message, only wait for the first reply
         MapMessage msg = new MapMessage(this.mapContextName,
                                         MapMessage.MSG_PING,
                                         false,
@@ -412,6 +411,9 @@ public abstract class AbstractReplicatedMap<K,V>
     }
 
     public Member[] getMapMembersExcl(Member[] exclude) {
+        if (exclude == null) {
+            return null;
+        }
         synchronized (mapMembers) {
             @SuppressWarnings("unchecked") // mapMembers has the correct type
             HashMap<Member, Long> list = (HashMap<Member, Long>)mapMembers.clone();
@@ -617,9 +619,16 @@ public abstract class AbstractReplicatedMap<K,V>
             mapmsg.deserialize(getExternalLoaders());
             if (mapmsg.getMsgType() == MapMessage.MSG_START) {
                 mapMemberAdded(mapmsg.getPrimary());
-            } else if (mapmsg.getMsgType() == MapMessage.MSG_INIT
-                    || mapmsg.getMsgType() == MapMessage.MSG_PING) {
+            } else if (mapmsg.getMsgType() == MapMessage.MSG_INIT) {
                 memberAlive(mapmsg.getPrimary());
+            } else if (mapmsg.getMsgType() == MapMessage.MSG_PING) {
+                Member member = mapmsg.getPrimary();
+                if (log.isInfoEnabled())
+                    log.info(sm.getString("abstractReplicatedMap.leftOver.pingMsg", member));
+                State state = (State) mapmsg.getValue();
+                if (state.isAvailable()) {
+                    memberAlive(member);
+                }
             } else {
                 // other messages are ignored.
                 if (log.isInfoEnabled())
@@ -973,7 +982,7 @@ public abstract class AbstractReplicatedMap<K,V>
                     //make sure we don't retrieve from ourselves
                     msg = new MapMessage(getMapContextName(), MapMessage.MSG_RETRIEVE_BACKUP, false,
                                          (Serializable) key, null, null, null,null);
-                    Response[] resp = getRpcChannel().send(entry.getBackupNodes(),msg, RpcChannel.FIRST_REPLY, Channel.SEND_OPTIONS_DEFAULT, getRpcTimeout());
+                    Response[] resp = getRpcChannel().send(entry.getBackupNodes(),msg, RpcChannel.FIRST_REPLY, getChannelSendOptions(), getRpcTimeout());
                     if (resp == null || resp.length == 0 || resp[0].getMessage() == null) {
                         //no responses
                         log.warn(sm.getString("abstractReplicatedMap.unable.retrieve", key));

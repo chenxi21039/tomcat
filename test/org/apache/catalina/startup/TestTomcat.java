@@ -39,10 +39,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.catalina.Context;
 import org.apache.catalina.Host;
+import org.apache.catalina.LifecycleEvent;
+import org.apache.catalina.LifecycleListener;
 import org.apache.catalina.core.StandardContext;
 import org.apache.catalina.core.StandardHost;
 import org.apache.catalina.ha.context.ReplicatedContext;
@@ -190,7 +193,7 @@ public class TestTomcat extends TomcatBaseTest {
         Context ctx = tomcat.addContext("", null);
 
         Tomcat.addServlet(ctx, "myServlet", new HelloWorld());
-        ctx.addServletMapping("/", "myServlet");
+        ctx.addServletMappingDecoded("/", "myServlet");
 
         tomcat.start();
 
@@ -241,7 +244,7 @@ public class TestTomcat extends TomcatBaseTest {
         Context ctx = tomcat.addContext("", null);
 
         Tomcat.addServlet(ctx, "myServlet", new HelloWorldSession());
-        ctx.addServletMapping("/", "myServlet");
+        ctx.addServletMappingDecoded("/", "myServlet");
 
         tomcat.start();
 
@@ -280,7 +283,7 @@ public class TestTomcat extends TomcatBaseTest {
         ctx.getNamingResources().addEnvironment(environment);
 
         Tomcat.addServlet(ctx, "jndiServlet", new HelloWorldJndi());
-        ctx.addServletMapping("/", "jndiServlet");
+        ctx.addServletMappingDecoded("/", "jndiServlet");
 
         tomcat.start();
 
@@ -314,7 +317,7 @@ public class TestTomcat extends TomcatBaseTest {
         ctx.getNamingResources().addResourceLink(link);
 
         Tomcat.addServlet(ctx, "jndiServlet", new HelloWorldJndi());
-        ctx.addServletMapping("/", "jndiServlet");
+        ctx.addServletMappingDecoded("/", "jndiServlet");
 
         tomcat.start();
 
@@ -339,7 +342,7 @@ public class TestTomcat extends TomcatBaseTest {
         ctx.addApplicationListener(WsContextListener.class.getName());
 
         Tomcat.addServlet(ctx, "testGetResource", new GetResource());
-        ctx.addServletMapping("/testGetResource", "testGetResource");
+        ctx.addServletMappingDecoded("/testGetResource", "testGetResource");
 
         tomcat.start();
 
@@ -379,7 +382,7 @@ public class TestTomcat extends TomcatBaseTest {
 
         InitCount initCount = new InitCount();
         Tomcat.addServlet(ctx, "initCount", initCount);
-        ctx.addServletMapping("/", "initCount");
+        ctx.addServletMappingDecoded("/", "initCount");
 
         tomcat.start();
 
@@ -530,4 +533,33 @@ public class TestTomcat extends TomcatBaseTest {
                 .getName());
     }
 
+    @Test
+    public void testCustomContextConfig() throws Exception {
+
+        Tomcat tomcat = getTomcatInstance();
+
+        tomcat.getHost().setConfigClass(CustomContextConfig.class.getName());
+
+        File docBase = new File("test/webapp");
+        tomcat.addWebapp("/test", docBase.getAbsolutePath());
+
+        tomcat.start();
+
+        Assert.assertTrue(CustomContextConfig.isUsed());
+    }
+
+    public static class CustomContextConfig implements LifecycleListener {
+
+        private static volatile boolean used = false;
+
+        public static boolean isUsed() {
+            return used;
+        }
+
+        @Override
+        public void lifecycleEvent(LifecycleEvent event) {
+            // Hack via a static since we can't pass an instance in the test.
+            used = true;
+        }
+    }
 }

@@ -1260,25 +1260,6 @@ public class StandardWrapper extends ContainerBase
 
 
     /**
-     * @return a String representation of this component.
-     */
-    @Override
-    public String toString() {
-
-        StringBuilder sb = new StringBuilder();
-        if (getParent() != null) {
-            sb.append(getParent().toString());
-            sb.append(".");
-        }
-        sb.append("StandardWrapper[");
-        sb.append(getName());
-        sb.append("]");
-        return (sb.toString());
-
-    }
-
-
-    /**
      * Process an UnavailableException, marking this servlet as unavailable
      * for the specified amount of time.
      *
@@ -1696,7 +1677,7 @@ public class StandardWrapper extends ContainerBase
         // Shut down this component
         super.stopInternal();
 
-        // Send j2ee.state.stoppped notification
+        // Send j2ee.state.stopped notification
         if (this.getObjectName() != null) {
             Notification notification =
                 new Notification("j2ee.state.stopped", this.getObjectName(),
@@ -1780,7 +1761,7 @@ public class StandardWrapper extends ContainerBase
 
 
     /**
-     * Remove a JMX notficationListener
+     * Remove a JMX notificationListener
      * @see javax.management.NotificationEmitter#removeNotificationListener(javax.management.NotificationListener, javax.management.NotificationFilter, java.lang.Object)
      */
     @Override

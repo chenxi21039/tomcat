@@ -114,7 +114,6 @@ import org.apache.tomcat.InstanceManagerBindings;
 import org.apache.tomcat.JarScanner;
 import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.IntrospectionUtils;
-import org.apache.tomcat.util.buf.UDecoder;
 import org.apache.tomcat.util.descriptor.XmlIdentifiers;
 import org.apache.tomcat.util.descriptor.web.ApplicationParameter;
 import org.apache.tomcat.util.descriptor.web.ErrorPage;
@@ -2802,7 +2801,7 @@ public class StandardContext extends ContainerBase
              */
             String[] jspMappings = oldJspServlet.findMappings();
             for (int i=0; jspMappings!=null && i<jspMappings.length; i++) {
-                addServletMapping(jspMappings[i], child.getName());
+                addServletMappingDecoded(jspMappings[i], child.getName());
             }
         }
     }
@@ -3112,22 +3111,6 @@ public class StandardContext extends ContainerBase
      *
      * @param pattern URL pattern to be mapped
      * @param name Name of the corresponding servlet to execute
-     *
-     * @exception IllegalArgumentException if the specified servlet name
-     *  is not known to this Context
-     */
-    @Override
-    public void addServletMapping(String pattern, String name) {
-        addServletMapping(pattern, name, false);
-    }
-
-
-    /**
-     * Add a new servlet mapping, replacing any existing mapping for
-     * the specified pattern.
-     *
-     * @param pattern URL pattern to be mapped
-     * @param name Name of the corresponding servlet to execute
      * @param jspWildCard true if name identifies the JspServlet
      * and pattern contains a wildcard; false otherwise
      *
@@ -3135,31 +3118,31 @@ public class StandardContext extends ContainerBase
      *  is not known to this Context
      */
     @Override
-    public void addServletMapping(String pattern, String name,
+    public void addServletMappingDecoded(String pattern, String name,
                                   boolean jspWildCard) {
         // Validate the proposed mapping
         if (findChild(name) == null)
             throw new IllegalArgumentException
                 (sm.getString("standardContext.servletMap.name", name));
-        String decodedPattern = adjustURLPattern(UDecoder.URLDecode(pattern));
-        if (!validateURLPattern(decodedPattern))
+        String adjustedPattern = adjustURLPattern(pattern);
+        if (!validateURLPattern(adjustedPattern))
             throw new IllegalArgumentException
-                (sm.getString("standardContext.servletMap.pattern", decodedPattern));
+                (sm.getString("standardContext.servletMap.pattern", adjustedPattern));
 
         // Add this mapping to our registered set
         synchronized (servletMappingsLock) {
-            String name2 = servletMappings.get(decodedPattern);
+            String name2 = servletMappings.get(adjustedPattern);
             if (name2 != null) {
                 // Don't allow more than one servlet on the same pattern
                 Wrapper wrapper = (Wrapper) findChild(name2);
-                wrapper.removeMapping(decodedPattern);
+                wrapper.removeMapping(adjustedPattern);
             }
-            servletMappings.put(decodedPattern, name);
+            servletMappings.put(adjustedPattern, name);
         }
         Wrapper wrapper = (Wrapper) findChild(name);
-        wrapper.addMapping(decodedPattern);
+        wrapper.addMapping(adjustedPattern);
 
-        fireContainerEvent("addServletMapping", decodedPattern);
+        fireContainerEvent("addServletMapping", adjustedPattern);
     }
 
 
@@ -5009,7 +4992,7 @@ public class StandardContext extends ContainerBase
         }
 
         if (!dependencyCheck) {
-            // do not make application available if depency check fails
+            // do not make application available if dependency check fails
             ok = false;
         }
 
@@ -5200,7 +5183,7 @@ public class StandardContext extends ContainerBase
             }
 
             // Check constraints for uncovered HTTP methods
-            // Needs to be after SCIs and listeners as they may programatically
+            // Needs to be after SCIs and listeners as they may programmatically
             // change constraints
             if (ok) {
                 checkConstraintsForUncoveredMethods(findConstraints());
@@ -5425,7 +5408,7 @@ public class StandardContext extends ContainerBase
                 log.debug("Processing standard container shutdown");
 
             // JNDI resources are unbound in CONFIGURE_STOP_EVENT so stop
-            // naming resources before they are unbound since NamingResoucres
+            // naming resources before they are unbound since NamingResources
             // does a JNDI lookup to retrieve the resource. This needs to be
             // after the application has finished with the resource
             if (namingResources != null) {
@@ -5482,7 +5465,7 @@ public class StandardContext extends ContainerBase
         try {
             resetContext();
         } catch( Exception ex ) {
-            log.error( "Error reseting context " + this + " " + ex, ex );
+            log.error( "Error resetting context " + this + " " + ex, ex );
         }
 
         //reset the instance manager
@@ -5612,27 +5595,8 @@ public class StandardContext extends ContainerBase
             log.debug("resetContext " + getObjectName());
     }
 
-    /**
-     * Return a String representation of this component.
-     */
-    @Override
-    public String toString() {
-
-        StringBuilder sb = new StringBuilder();
-        if (getParent() != null) {
-            sb.append(getParent().toString());
-            sb.append(".");
-        }
-        sb.append("StandardContext[");
-        sb.append(getName());
-        sb.append("]");
-        return (sb.toString());
-
-    }
-
 
     // ------------------------------------------------------ Protected Methods
-
 
     /**
      * Adjust the URL pattern to begin with a leading slash, if appropriate
@@ -5721,10 +5685,10 @@ public class StandardContext extends ContainerBase
                 }
             }
 
-            // Note: For progammatically added Servlets this may not be the
+            // Note: For programmatically added Servlets this may not be the
             //       complete set of security constraints since additional
             //       URL patterns can be added after the application has called
-            //       setSecurity. For all programmatically added servilets, the
+            //       setSecurity. For all programmatically added servlets, the
             //       #dynamicServletAdded() method sets a flag that ensures that
             //       the constraints are re-evaluated before the servlet is
             //       first used
@@ -6239,7 +6203,7 @@ public class StandardContext extends ContainerBase
     }
 
 
-    /* Remove a JMX notficationListener
+    /* Remove a JMX notificationListener
      * @see javax.management.NotificationEmitter#removeNotificationListener(javax.management.NotificationListener, javax.management.NotificationFilter, java.lang.Object)
      */
     @Override

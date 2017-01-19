@@ -22,10 +22,12 @@ import java.net.URLStreamHandlerFactory;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.apache.catalina.webresources.war.Handler;
+
 public class TomcatURLStreamHandlerFactory implements URLStreamHandlerFactory {
 
     private static final String WAR_PROTOCOL = "war";
-    private static final String CLASSPTH_PROTOCOL = "classpath";
+    private static final String CLASSPATH_PROTOCOL = "classpath";
 
     // Singleton instance
     private static volatile TomcatURLStreamHandlerFactory instance = null;
@@ -155,8 +157,8 @@ public class TomcatURLStreamHandlerFactory implements URLStreamHandlerFactory {
         // Tomcat's handler always takes priority so applications can't override
         // it.
         if (WAR_PROTOCOL.equals(protocol)) {
-            return new WarURLStreamHandler();
-        } else if (CLASSPTH_PROTOCOL.equals(protocol)) {
+            return new Handler();
+        } else if (CLASSPATH_PROTOCOL.equals(protocol)) {
             return new ClasspathURLStreamHandler();
         }
 

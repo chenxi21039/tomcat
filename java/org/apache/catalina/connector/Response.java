@@ -98,24 +98,17 @@ public class Response implements HttpServletResponse {
     protected SimpleDateFormat format = null;
 
 
-    // ------------------------------------------------------------- Properties
-
-    /**
-     * Set the Connector through which this Request was received.
-     *
-     * @param connector The new connector
-     */
-    public void setConnector(Connector connector) {
-        if("AJP/1.3".equals(connector.getProtocol())) {
-            // default size to size of one ajp-packet
-            outputBuffer = new OutputBuffer(8184);
-        } else {
-            outputBuffer = new OutputBuffer();
-        }
-        outputStream = new CoyoteOutputStream(outputBuffer);
-        writer = new CoyoteWriter(outputBuffer);
+    public Response() {
+        this(OutputBuffer.DEFAULT_BUFFER_SIZE);
     }
 
+
+    public Response(int outputBufferSize) {
+        outputBuffer = new OutputBuffer(outputBufferSize);
+    }
+
+
+    // ------------------------------------------------------------- Properties
 
     /**
      * Coyote response.
@@ -151,7 +144,7 @@ public class Response implements HttpServletResponse {
     /**
      * The associated output buffer.
      */
-    protected OutputBuffer outputBuffer;
+    protected final OutputBuffer outputBuffer;
 
 
     /**
@@ -279,7 +272,7 @@ public class Response implements HttpServletResponse {
                 writer.clear();
                 writer = null;
             }
-        } else {
+        } else if (writer != null) {
             writer.recycle();
         }
 

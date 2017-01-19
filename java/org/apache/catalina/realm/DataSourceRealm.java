@@ -72,12 +72,6 @@ public class DataSourceRealm extends RealmBase {
 
 
     /**
-     * Descriptive information about this Realm implementation.
-     */
-    protected static final String name = "DataSourceRealm";
-
-
-    /**
      * The column in the user role table that names a role
      */
     protected String roleNameCol = null;
@@ -105,6 +99,12 @@ public class DataSourceRealm extends RealmBase {
      * The table that holds user data.
      */
     protected String userTable = null;
+
+
+    /**
+     * Last connection attempt.
+     */
+    private volatile boolean connectionSuccess = true;
 
 
     // ------------------------------------------------------------- Properties
@@ -270,6 +270,11 @@ public class DataSourceRealm extends RealmBase {
     }
 
 
+    @Override
+    public boolean isAvailable() {
+        return connectionSuccess;
+    }
+
     // -------------------------------------------------------- Package Methods
 
 
@@ -287,16 +292,28 @@ public class DataSourceRealm extends RealmBase {
      * @return the associated principal, or <code>null</code> if there is none.
      */
     protected Principal authenticate(Connection dbConnection,
-                                               String username,
-                                               String credentials) {
+                                     String username,
+                                     String credentials) {
+        // No user or no credentials
+        // Can't possibly authenticate, don't bother the database then
+        if (username == null || credentials == null) {
+            if (containerLog.isTraceEnabled())
+                containerLog.trace(sm.getString("dataSourceRealm.authenticateFailure",
+                                                username));
+            return null;
+        }
 
+        // Look up the user's credentials
         String dbCredentials = getPassword(dbConnection, username);
 
-        if (credentials == null || dbCredentials == null) {
+        if(dbCredentials == null) {
+            // User was not found in the database.
+            // Waste a bit of time as not to reveal that the user does not exist.
+            getCredentialHandler().mutate(credentials);
+
             if (containerLog.isTraceEnabled())
-                containerLog.trace(
-                    sm.getString("dataSourceRealm.authenticateFailure",
-                                 username));
+                containerLog.trace(sm.getString("dataSourceRealm.authenticateFailure",
+                                                username));
             return null;
         }
 
@@ -305,15 +322,13 @@ public class DataSourceRealm extends RealmBase {
 
         if (validated) {
             if (containerLog.isTraceEnabled())
-                containerLog.trace(
-                    sm.getString("dataSourceRealm.authenticateSuccess",
-                                 username));
+                containerLog.trace(sm.getString("dataSourceRealm.authenticateSuccess",
+                                                username));
         } else {
             if (containerLog.isTraceEnabled())
-                containerLog.trace(
-                    sm.getString("dataSourceRealm.authenticateFailure",
-                                 username));
-            return (null);
+                containerLog.trace(sm.getString("dataSourceRealm.authenticateFailure",
+                                                username));
+            return null;
         }
 
         ArrayList<String> list = getRoles(dbConnection, username);
@@ -368,22 +383,15 @@ public class DataSourceRealm extends RealmBase {
                 context = getServer().getGlobalNamingContext();
             }
             DataSource dataSource = (DataSource)context.lookup(dataSourceName);
-        return dataSource.getConnection();
+            Connection connection = dataSource.getConnection();
+            connectionSuccess = true;
+            return connection;
         } catch (Exception e) {
+            connectionSuccess = false;
             // Log the problem for posterity
             containerLog.error(sm.getString("dataSourceRealm.exception"), e);
         }
         return null;
-    }
-
-    /**
-     * Return a short name for this Realm implementation.
-     */
-    @Override
-    protected String getName() {
-
-        return (name);
-
     }
 
     /**

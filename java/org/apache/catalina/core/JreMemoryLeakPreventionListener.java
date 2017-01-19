@@ -25,6 +25,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.sql.DriverManager;
 import java.util.StringTokenizer;
+import java.util.concurrent.ForkJoinPool;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -33,6 +34,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.apache.catalina.Lifecycle;
 import org.apache.catalina.LifecycleEvent;
 import org.apache.catalina.LifecycleListener;
+import org.apache.catalina.startup.SafeForkJoinWorkerThreadFactory;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.ExceptionUtils;
@@ -63,6 +65,8 @@ public class JreMemoryLeakPreventionListener implements LifecycleListener {
     private static final StringManager sm =
         StringManager.getManager(Constants.Package);
 
+    private static final String FORK_JOIN_POOL_THREAD_FACTORY_PROPERTY =
+            "java.util.concurrent.ForkJoinPool.common.threadFactory";
     /**
      * Protect against the memory leak caused when the first call to
      * <code>java.awt.Toolkit.getDefaultToolkit()</code> is triggered
@@ -161,6 +165,21 @@ public class JreMemoryLeakPreventionListener implements LifecycleListener {
     }
 
     /**
+     * {@link ForkJoinPool#commonPool()} creates a thread pool that, by default,
+     * creates threads that retain references to the thread context class
+     * loader.
+     *
+     * @see "http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8172726"
+     */
+    private boolean forkJoinCommonPoolProtection = true;
+    public boolean getForkJoinCommonPoolProtection() {
+        return forkJoinCommonPoolProtection;
+    }
+    public void setForkJoinCommonPoolProtection(boolean forkJoinCommonPoolProtection) {
+        this.forkJoinCommonPoolProtection = forkJoinCommonPoolProtection;
+    }
+
+    /**
      * List of comma-separated fully qualified class names to load and initialize during
      * the startup of this Listener. This allows to pre-load classes that are known to
      * provoke classloader leaks if they are loaded during a request processing.
@@ -251,8 +270,10 @@ public class JreMemoryLeakPreventionListener implements LifecycleListener {
                  * to the web application class loader.
                  *
                  * Instead we initialize JCA right now.
+                 *
+                 * Fixed in Java 9 onwards (from early access build 133)
                  */
-                if (tokenPollerProtection) {
+                if (tokenPollerProtection && !JreCompat.isJre9Available()) {
                     java.security.Security.getProviders();
                 }
 
@@ -287,7 +308,10 @@ public class JreMemoryLeakPreventionListener implements LifecycleListener {
                     }
                 }
 
-                if (xmlParsingProtection) {
+                /*
+                 * Fixed in Java 9 onwards (from early access build 133)
+                 */
+                if (xmlParsingProtection && !JreCompat.isJre9Available()) {
                     // There are two known issues with XML parsing that affect
                     // Java 8+. The issues both relate to cached Exception
                     // instances that retain a link to the TCCL via the
@@ -328,6 +352,17 @@ public class JreMemoryLeakPreventionListener implements LifecycleListener {
                             log.debug(sm.getString(
                                     "jreLeakListener.ldapPoolManagerFail"), e);
                         }
+                    }
+                }
+
+                /*
+                 * Present in Java 8 onwards
+                 */
+                if (forkJoinCommonPoolProtection) {
+                    // Don't override any explicitly set property
+                    if (System.getProperty(FORK_JOIN_POOL_THREAD_FACTORY_PROPERTY) == null) {
+                        System.setProperty(FORK_JOIN_POOL_THREAD_FACTORY_PROPERTY,
+                                SafeForkJoinWorkerThreadFactory.class.getName());
                     }
                 }
 

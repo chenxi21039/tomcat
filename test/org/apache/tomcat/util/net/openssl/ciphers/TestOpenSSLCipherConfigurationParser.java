@@ -17,6 +17,7 @@
 package org.apache.tomcat.util.net.openssl.ciphers;
 
 import java.util.List;
+import java.util.TreeSet;
 
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -26,9 +27,9 @@ public class TestOpenSSLCipherConfigurationParser {
 
     @Test
     public void testDEFAULT() throws Exception {
-        // NULL, RC4, DSS, SEED, IDEA, CAMELLIA and SEC-CCM were removed from default in 1.1.0-dev
         if (TesterOpenSSL.VERSION < 10100) {
-            testSpecification("DEFAULT:!RC4:!DSS:!SEED:!IDEA:!CAMELLIA:!AESCCM");
+            // Account for classes of ciphers removed from DEFAULT in 1.1.0
+            testSpecification("DEFAULT:!RC4:!DSS:!SEED:!IDEA:!CAMELLIA:!AESCCM:!3DES");
         } else {
             testSpecification("DEFAULT");
         }
@@ -37,9 +38,9 @@ public class TestOpenSSLCipherConfigurationParser {
 
     @Test
     public void testCOMPLEMENTOFDEFAULT() throws Exception {
-        // NULL, RC4, DSS, SEED, IDEA, CAMELLIA and SEC-CCM were removed from default in 1.1.0-dev
         if (TesterOpenSSL.VERSION < 10100) {
-            testSpecification("COMPLEMENTOFDEFAULT:RC4:DSS:SEED:IDEA:CAMELLIA:AESCCM:aNULL");
+            // Account for classes of ciphers removed from DEFAULT in 1.1.0
+            testSpecification("COMPLEMENTOFDEFAULT:RC4:DSS:SEED:IDEA:CAMELLIA:AESCCM:aNULL:3DES");
         } else {
             testSpecification("COMPLEMENTOFDEFAULT");
         }
@@ -72,23 +73,13 @@ public class TestOpenSSLCipherConfigurationParser {
 
     @Test
     public void testHIGH() throws Exception {
-        // 3DES has been moved to medium in 1.1.0-dev
-        if (TesterOpenSSL.VERSION < 10100) {
-            testSpecification("HIGH:!3DES");
-        } else {
-            testSpecification("HIGH");
-        }
+        testSpecification("HIGH");
     }
 
 
     @Test
     public void testMEDIUM() throws Exception {
-        // 3DES has been moved to medium in 1.1.0-dev
-        if (TesterOpenSSL.VERSION < 10100) {
-             testSpecification("MEDIUM:3DES");
-        } else {
-            testSpecification("MEDIUM");
-        }
+        testSpecification("MEDIUM");
     }
 
 
@@ -542,12 +533,7 @@ public class TestOpenSSLCipherConfigurationParser {
         // Tomcat 8 default as of 2014-08-04
         // This gets an A- from https://www.ssllabs.com/ssltest with no FS for
         // a number of the reference browsers
-        // 3DES has been moved to medium in 1.1.0-dev
-        if (TesterOpenSSL.VERSION < 10100) {
-            testSpecification("HIGH:!aNULL:!eNULL:!EXPORT:!3DES:!DES:!RC4:!MD5");
-        } else {
-            testSpecification("HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5");
-        }
+        testSpecification("HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5");
     }
 
 
@@ -577,8 +563,11 @@ public class TestOpenSSLCipherConfigurationParser {
 
         // First check the lists have the same entries
         // Order is NOT important at this point. It is checked below.
-        Assert.assertEquals(jsseCipherListFromOpenSSL.size(), jsseCipherListFromParser.size());
-        Assert.assertTrue(jsseCipherListFromOpenSSL.containsAll(jsseCipherListFromParser));
+        Assert.assertEquals(
+                "Expected " + jsseCipherListFromParser.size() + " ciphers but got "
+                        + jsseCipherListFromOpenSSL.size() + " for the specification '"
+                        + specification + "'",
+                new TreeSet<>(jsseCipherListFromParser), new TreeSet<>(jsseCipherListFromOpenSSL));
 
         // OpenSSL treats many ciphers as having equal preference. The order
         // returned depends on the order they are requested. The following code

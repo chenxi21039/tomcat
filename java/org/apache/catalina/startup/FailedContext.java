@@ -241,6 +241,9 @@ public class FailedContext extends LifecycleMBeanBase implements Context {
     public Log getLogger() { return null; }
 
     @Override
+    public String getLogName() { return null; }
+
+    @Override
     public Manager getManager() { return null; }
     @Override
     public void setManager(Manager manager) { /* NO-OP */ }
@@ -567,9 +570,7 @@ public class FailedContext extends LifecycleMBeanBase implements Context {
     public void removeSecurityRole(String role) { /* NO-OP */ }
 
     @Override
-    public void addServletMapping(String pattern, String name) { /* NO-OP */ }
-    @Override
-    public void addServletMapping(String pattern, String name,
+    public void addServletMappingDecoded(String pattern, String name,
             boolean jspWildcard) { /* NO-OP */ }
     @Override
     public String findServletMapping(String pattern) { return null; }

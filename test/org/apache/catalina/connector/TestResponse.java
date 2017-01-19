@@ -56,7 +56,7 @@ public class TestResponse extends TomcatBaseTest {
         Context ctx = tomcat.addContext("", null);
 
         Tomcat.addServlet(ctx, "servlet", new Bug49598Servlet());
-        ctx.addServletMapping("/", "servlet");
+        ctx.addServletMappingDecoded("/", "servlet");
 
         tomcat.start();
 
@@ -112,7 +112,7 @@ public class TestResponse extends TomcatBaseTest {
         Context ctx = tomcat.addContext("", null);
 
         Tomcat.addServlet(ctx, "servlet", new CharsetServlet());
-        ctx.addServletMapping("/", "servlet");
+        ctx.addServletMappingDecoded("/", "servlet");
 
         tomcat.start();
 
@@ -151,7 +151,7 @@ public class TestResponse extends TomcatBaseTest {
         Context ctx = tomcat.addContext("", null);
 
         Tomcat.addServlet(ctx, "servlet", new Bug52811Servlet());
-        ctx.addServletMapping("/", "servlet");
+        ctx.addServletMappingDecoded("/", "servlet");
 
         tomcat.start();
 
@@ -601,9 +601,8 @@ public class TestResponse extends TomcatBaseTest {
         Connector connector = new Connector();
         org.apache.coyote.Response cResponse = new org.apache.coyote.Response();
         Response response = new Response();
-        response.setConnector(connector);
         response.setCoyoteResponse(cResponse);
-        Request request = new Request();
+        Request request = new Request(connector);
         org.apache.coyote.Request cRequest = new org.apache.coyote.Request();
         request.setCoyoteRequest(cRequest);
         Context context = new TesterContext();
