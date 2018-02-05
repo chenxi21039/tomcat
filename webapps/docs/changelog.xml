@@ -45,6 +45,14 @@
   issues do not "pop up" wrt. others).
 -->
 <section name="Tomcat 9.0.0.M18 (markt)" rtext="in development">
+  <subsection name="Catalina">
+    <changelog>
+      <update>
+        <bug>60596</bug>: Improve performance of DefaultServlet when sendfile
+        feature is disabled on connector. (kkolinko)
+      </update>
+    </changelog>
+  </subsection>
   <subsection name="Coyote">
     <changelog>
       <fix>
@@ -54,6 +62,14 @@
       <fix>
         Improve NIO2 look-ahead parsing of TLS client hello for SNI with large
         client hello messages. (markt)
+      </fix>
+      <add>
+        Enable ALPN and also, therefore, HTTP/2 for the NIO and NIO2 HTTP
+        connectors when using the JSSE implementation for TLS when running on
+        Java 9. (markt)
+      </add>
+      <fix>
+        Restore Java 9 direct byte buffer compatibility. (remm)
       </fix>
     </changelog>
   </subsection>
@@ -90,6 +106,7 @@
   <subsection name="Catalina">
     <changelog>
       <add>
+        <bug>60620</bug>:
         Extend the <code>JreMemoryLeakPreventionListener</code> to provide
         protection against <code>ForkJoinPool.commonPool()</code> related memory
         leaks. (markt)
